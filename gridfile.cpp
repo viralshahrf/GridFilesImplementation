@@ -158,6 +158,68 @@ int getGridLocation(int64_t * lon, int64_t * lat, double x, double y,
 	return error;
 }
 
+int insertGridPartition(int lon, int partition, string fname, int64_t size) {
+	int error = 0;
+	int sfd = -1;
+	double *saddr = NULL;
+	int64_t ssize = (2*size + 1) * 8;
+	string sname = fname + "scale";
+	int64_t ints = 0;
+	double *inta = NULL;
+	double *part = NULL;
+	int64_t iter = 0;
+	int64_t ipart = 0;
+
+	sfd = open(sname.c_str(), O_RDWR);
+	if (sfd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	saddr = (double *)mmap(NULL, ssize, PROT_READ | PROT_WRITE, MAP_SHARED, sfd, 0);
+	if (*saddr == -1) {
+		error = -errno;
+		close(sfd);
+		goto clean;
+	}
+
+	if (lon) {
+		ints = saddr[1];
+		inta = saddr + 1;
+		part = saddr + 2;
+	} else {
+		ints = saddr[size + 1];
+		inta = saddr + size + 1;
+		part = saddr + 1 + size + 1;
+	}
+
+	if (ints >= size-1) {
+		error = -ENOMEM;
+		munmap(saddr, ssize);
+		close(sfd);
+		goto clean;
+	}
+
+	while (iter < ints && partition > part[iter]) {
+		iter++;
+	}
+
+	ipart = iter;
+
+	for (iter = ints; iter > ipart; iter--) {
+		part[iter] = part[iter-1];
+	}
+
+	part[ipart] = partition;
+	*inta += 1;
+
+	munmap(saddr, ssize);
+	close(sfd);
+
+clean:
+	return error;
+}
+
 int main()
 {
 	return 0;
