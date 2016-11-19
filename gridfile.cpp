@@ -158,11 +158,12 @@ int getGridLocation(int64_t * lon, int64_t * lat, double x, double y,
 	return error;
 }
 
-int insertGridPartition(int lon, int partition, string fname, int64_t size) {
+int insertGridPartition(int lon, int partition, string fname, int64_t size)
+{
 	int error = 0;
 	int sfd = -1;
 	double *saddr = NULL;
-	int64_t ssize = (2*size + 1) * 8;
+	int64_t ssize = (2 * size + 1) * 8;
 	string sname = fname + "scale";
 	int64_t ints = 0;
 	double *inta = NULL;
@@ -176,7 +177,9 @@ int insertGridPartition(int lon, int partition, string fname, int64_t size) {
 		goto clean;
 	}
 
-	saddr = (double *)mmap(NULL, ssize, PROT_READ | PROT_WRITE, MAP_SHARED, sfd, 0);
+	saddr =
+	    (double *)mmap(NULL, ssize, PROT_READ | PROT_WRITE, MAP_SHARED, sfd,
+			   0);
 	if (*saddr == -1) {
 		error = -errno;
 		close(sfd);
@@ -193,7 +196,7 @@ int insertGridPartition(int lon, int partition, string fname, int64_t size) {
 		part = saddr + 1 + size + 1;
 	}
 
-	if (ints >= size-1) {
+	if (ints >= size - 1) {
 		error = -ENOMEM;
 		munmap(saddr, ssize);
 		close(sfd);
@@ -207,7 +210,7 @@ int insertGridPartition(int lon, int partition, string fname, int64_t size) {
 	ipart = iter;
 
 	for (iter = ints; iter > ipart; iter--) {
-		part[iter] = part[iter-1];
+		part[iter] = part[iter - 1];
 	}
 
 	part[ipart] = partition;
@@ -216,7 +219,60 @@ int insertGridPartition(int lon, int partition, string fname, int64_t size) {
 	munmap(saddr, ssize);
 	close(sfd);
 
-clean:
+ clean:
+	return error;
+}
+
+int getGridEntry(int64_t lon, int64_t lat, double **gentry, string fname,
+		 int64_t size)
+{
+	int error = 0;
+	string dname = fname + "directory";
+	int64_t gesize = 32;
+	int dfd = -1;
+	int64_t offset = 0;
+
+	dfd = open(dname.c_str(), O_RDWR);
+	if (dfd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	offset = lon * size * gesize + lat * gesize;
+
+	*gentry =
+	    (double *)mmap(NULL, gesize, PROT_READ | PROT_WRITE, MAP_SHARED,
+			   dfd, offset);
+	if (**gentry == -1) {
+		error = -errno;
+		*gentry = NULL;
+		close(dfd);
+		goto clean;
+	}
+
+	close(dfd);
+
+ clean:
+	return error;
+}
+
+int releaseGridEntry(double *gentry, string fname)
+{
+	int error = 0;
+	string dname = fname + "directory";
+	int64_t gesize = 32;
+	int dfd = -1;
+
+	dfd = open(dname.c_str(), O_RDWR);
+	if (dfd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	munmap(gentry, gesize);
+	close(dfd);
+
+ clean:
 	return error;
 }
 
