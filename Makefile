@@ -6,6 +6,7 @@ clean :
 	rm -f build \
 	*.o \
 	*.out \
+	*.cpp~ \
 	*.a
 	rm -rf *.swp
 	rm -rf gridfile

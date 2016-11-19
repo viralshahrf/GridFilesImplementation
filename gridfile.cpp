@@ -4,6 +4,7 @@
 #include <string.h>
 #include <sys/mman.h>
 #include <fcntl.h>
+#include <unistd.h>
 #include <iostream>
 #include <string>
 
@@ -48,9 +49,9 @@ int createGrid(int64_t size, string fname)
 {
 	int error = 0;
 	FILE *f = NULL;
-	int ssize = (2 * size + 1) * 8;
-	int dsize = (size * size) * 4 * 8;
-	int bsize = (size * size) * 4096;
+	int64_t ssize = (2 * size + 1) * 8;
+	int64_t dsize = (size * size) * 4 * 8;
+	int64_t bsize = (size * size) * 4096;
 	string sname = fname + "scale";
 	string dname = fname + "directory";
 	string bname = fname + "buckets";
@@ -63,7 +64,7 @@ int createGrid(int64_t size, string fname)
 		goto clean;
 	}
 
-	sfd = open(sname.c_str(), O_RDWR | O_CREAT);
+	sfd = open(sname.c_str(), O_RDWR);
 	if (sfd == -1) {
 		error = -errno;
 		goto clean;
@@ -74,12 +75,13 @@ int createGrid(int64_t size, string fname)
 			     sfd, 0);
 	if (*saddr == -1) {
 		error = -errno;
-		fclose(f);
+		close(sfd);
 		goto clean;
 	}
 
 	saddr[0] = size;
 	munmap(saddr, ssize);
+	close(sfd);
 
 	error = createFile(dsize, dname, "w");
 	if (error < 0) {
@@ -103,7 +105,60 @@ int createGrid(int64_t size, string fname)
 	return error;
 }
 
+int getGridLocation(int64_t * lon, int64_t * lat, double x, double y,
+		    string fname, int64_t size)
+{
+	int error = 0;
+	int sfd = -1;
+	double *saddr = NULL;
+	int64_t ssize = (2 * size + 1) * 8;
+	string sname = fname + "scale";
+	int64_t xint = 0;
+	int64_t yint = 0;
+	double *xpart = NULL;
+	double *ypart = NULL;
+	int64_t iter = 0;
+
+	sfd = open(sname.c_str(), O_RDWR);
+	if (sfd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	saddr =
+	    (double *)mmap(NULL, ssize, PROT_READ | PROT_WRITE, MAP_SHARED, sfd,
+			   0);
+	if (*saddr == -1) {
+		error = -errno;
+		close(sfd);
+		goto clean;
+	}
+
+	xint = saddr[1];
+	yint = saddr[size + 1];
+
+	xpart = saddr + 2;
+	ypart = saddr + 1 + size + 1;
+
+	*lon = 0;
+	while (iter < xint && x > xpart[iter]) {
+		*lon = ++iter;
+	}
+
+	iter = 0;
+	*lat = 0;
+	while (iter < yint && y > ypart[iter]) {
+		*lat = ++iter;
+	}
+
+	munmap(saddr, ssize);
+	close(sfd);
+
+ clean:
+	return error;
+}
+
 int main()
 {
-	return createGrid(5, "grid");
+	return 0;
 }
