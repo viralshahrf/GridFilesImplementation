@@ -242,6 +242,51 @@ int insertGridPartition(int lon, int partition, string fname, int64_t size)
 	return error;
 }
 
+int mapGridScale(double **gscale, string fname, int64_t size)
+{
+	int error = 0;
+	int64_t ssize = (2 * size + 1) * 8;
+	string sname = fname + "scale";
+	int sfd = -1;
+
+	sfd = open(sname.c_str(), O_RDWR);
+	if (sfd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	*gscale =
+	    (double *)mmap(NULL, ssize, PROT_READ | PROT_WRITE, MAP_SHARED, sfd,
+			   0);
+	if (**gscale == -1) {
+		error = -errno;
+		close(sfd);
+		goto clean;
+	}
+
+	close(sfd);
+
+ clean:
+	return error;
+}
+
+int unmapGridScale(double *gscale, int64_t size)
+{
+	int error = 0;
+	int64_t ssize = (2 * size + 1) * 8;
+
+	if (gscale == NULL) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	munmap(gscale, ssize);
+	gscale = NULL;
+
+ clean:
+	return error;
+}
+
 int mapGridDirectory(double **gdirectory, string fname, int64_t size)
 {
 	int error = 0;
