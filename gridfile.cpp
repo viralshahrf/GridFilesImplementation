@@ -696,7 +696,7 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 	double sn = 0;
 	double dn = 0;
 
-	if (slon > xint || slat > yint || dlon > xint || dlat >= yint) {
+	if (slon > xint || slat > yint || dlon > xint || dlat > yint) {
 		error = -EINVAL;
 		goto clean;
 	}
@@ -741,16 +741,16 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 		while (iter < sn) {
 			cbe = bentries + iter * 3;
 			if (cbe[0] > avgx) {
-				error = deleteBucketEntry(sb, iter);
+				error =
+				    appendBucketEntry(db, cbe[0], cbe[1],
+						      cbe[2]);
 				if (error < 0) {
 					unmapGridBucket(sb);
 					unmapGridBucket(db);
 					goto clean;
 				}
 
-				error =
-				    appendBucketEntry(db, cbe[0], cbe[1],
-						      cbe[2]);
+				error = deleteBucketEntry(sb, iter);
 				if (error < 0) {
 					unmapGridBucket(sb);
 					unmapGridBucket(db);
@@ -771,16 +771,16 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 		while (iter < sn) {
 			cbe = bentries + iter * 3;
 			if (cbe[1] > avgy) {
-				error = deleteBucketEntry(sb, iter);
+				error =
+				    appendBucketEntry(db, cbe[0], cbe[1],
+						      cbe[2]);
 				if (error < 0) {
 					unmapGridBucket(sb);
 					unmapGridBucket(db);
 					goto clean;
 				}
 
-				error =
-				    appendBucketEntry(db, cbe[0], cbe[1],
-						      cbe[2]);
+				error = deleteBucketEntry(sb, iter);
 				if (error < 0) {
 					unmapGridBucket(sb);
 					unmapGridBucket(db);
@@ -815,24 +815,89 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 
 int main()
 {
-	createGrid(5, "grid");
+	int error = 0;
 	double *gs = NULL;
-	mapGridScale(&gs, "grid", 5);
 	double *gd = NULL;
-	mapGridDirectory(&gd, "grid", 5);
 	double *ge = NULL;
-	getGridEntry(0, 0, &ge, gd, 5);
+	double *sge = NULL;
 	char data[] = "data";
-	insertGridRecord(ge, 1, 2, data, sizeof(data), "grid");
-	insertGridRecord(ge, 2, 3, data, sizeof(data), "grid");
-	insertGridRecord(ge, 3, 4, data, sizeof(data), "grid");
-	insertGridRecord(ge, 4, 5, data, sizeof(data), "grid");
-	insertGridRecord(ge, 5, 6, data, sizeof(data), "grid");
-	double *gb = NULL;
-	mapGridBucket(ge, &gb, "grid");
-	deleteBucketEntry(gb, 4);
-	unmapGridBucket(gb);
-	unmapGridDirectory(gd, 5);
-	unmapGridScale(gs, 5);
-	return 0;
+
+	error = createGrid(5, "grid");
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = mapGridScale(&gs, "grid", 5);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = mapGridDirectory(&gd, "grid", 5);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = insertGridPartition(1, 2.5, "grid", 5);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = getGridEntry(0, 0, &ge, gd, 5);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = getGridEntry(1, 0, &sge, gd, 5);
+	if (error < 0) {
+		goto clean;
+	}
+
+	sge[0] = 0;
+	sge[1] = 0;
+	sge[2] = 0;
+	sge[3] = gd[0];
+
+	error = insertGridRecord(ge, 1, 2, data, sizeof(data), "grid");
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = insertGridRecord(ge, 2, 3, data, sizeof(data), "grid");
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = insertGridRecord(ge, 3, 4, data, sizeof(data), "grid");
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = insertGridRecord(ge, 4, 5, data, sizeof(data), "grid");
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = insertGridRecord(ge, 5, 6, data, sizeof(data), "grid");
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = splitBucket(gs, gd, 1, 0, 0, 1, 0, "grid");
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = unmapGridDirectory(gd, 5);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = unmapGridScale(gs, 5);
+	if (error < 0) {
+		goto clean;
+	}
+
+ clean:
+	cout << "error: " << error << "\n";
+	return error;
 }
