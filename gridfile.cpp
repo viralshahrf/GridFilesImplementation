@@ -673,6 +673,146 @@ int getGridPartitions(double *gscale, double *x, double *y, int64_t lon,
 	return error;
 }
 
+int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
+		int64_t slat, int64_t dlon, int64_t dlat, string fname)
+{
+	int error = 0;
+	double *sge = NULL;
+	double *dge = NULL;
+	double *sb = NULL;
+	double *db = NULL;
+	int64_t size = (int64_t) gscale[0];
+	double xint = gscale[1];
+	double yint = gscale[1 + size];
+	double avgx = 0;
+	double avgy = 0;
+	int64_t iter = 0;
+	double *bentries = NULL;
+	double *cbe = NULL;
+	double ssx = 0;
+	double ssy = 0;
+	double dsx = 0;
+	double dsy = 0;
+	double sn = 0;
+	double dn = 0;
+
+	if (slon > xint || slat > yint || dlon > xint || dlat >= yint) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	error = getGridEntry(slon, slat, &sge, gdirectory, size);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error == getGridEntry(dlon, dlat, &dge, gdirectory, size);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = getGridPartitions(gscale, &avgx, &avgy, dlon, dlat);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = mapGridBucket(sge, &sb, fname);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = mapGridBucket(dge, &db, fname);
+	if (error < 0) {
+		unmapGridBucket(sge);
+		goto clean;
+	}
+
+	bentries = sb + 1;
+
+	sn = sge[0];
+	ssx = sge[1] * sn;
+	ssy = sge[1] * sn;
+
+	dn = dge[0];
+	dsx = dge[1] * dn;
+	dsy = dge[2] * dn;
+
+	if (vertical) {
+		while (iter < sn) {
+			cbe = bentries + iter * 3;
+			if (cbe[0] > avgx) {
+				error = deleteBucketEntry(sb, iter);
+				if (error < 0) {
+					unmapGridBucket(sb);
+					unmapGridBucket(db);
+					goto clean;
+				}
+
+				error =
+				    appendBucketEntry(db, cbe[0], cbe[1],
+						      cbe[2]);
+				if (error < 0) {
+					unmapGridBucket(sb);
+					unmapGridBucket(db);
+					goto clean;
+				}
+
+				sn--;
+				dn++;
+				ssx -= cbe[0];
+				ssy -= cbe[1];
+				dsx += cbe[0];
+				dsy += cbe[1];
+			} else {
+				iter++;
+			}
+		}
+	} else {
+		while (iter < sn) {
+			cbe = bentries + iter * 3;
+			if (cbe[1] > avgy) {
+				error = deleteBucketEntry(sb, iter);
+				if (error < 0) {
+					unmapGridBucket(sb);
+					unmapGridBucket(db);
+					goto clean;
+				}
+
+				error =
+				    appendBucketEntry(db, cbe[0], cbe[1],
+						      cbe[2]);
+				if (error < 0) {
+					unmapGridBucket(sb);
+					unmapGridBucket(db);
+					goto clean;
+				}
+				sn--;
+				dn++;
+				ssx -= cbe[0];
+				ssy -= cbe[1];
+				dsx += cbe[0];
+				dsy += cbe[1];
+			} else {
+				iter++;
+			}
+		}
+	}
+
+	sge[0] = sn;
+	sge[1] = ssx / sn;
+	sge[2] = ssy / sn;
+
+	dge[0] = dn;
+	dge[1] = dsx / dn;
+	dge[2] = dsy / dn;
+
+	unmapGridBucket(sb);
+	unmapGridBucket(db);
+
+ clean:
+	return error;
+}
+
 int main()
 {
 	createGrid(5, "grid");
