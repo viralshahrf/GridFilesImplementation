@@ -492,6 +492,110 @@ int unmapGridBucket(double *gbucket)
 	return error;
 }
 
+int appendRecord(double *aoffset, void *record, int64_t rsize, string fname)
+{
+	int error = 0;
+	string rname = fname + "records";
+	int fd = -1;
+	int64_t wbytes = -1;
+
+	fd = open(rname.c_str(), O_RDWR);
+	if (fd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	*aoffset = lseek(fd, 0, SEEK_END);
+	cout << *aoffset << "\n";
+
+	while (wbytes < 0) {
+		wbytes = write(fd, record, rsize);
+
+		if (wbytes < 0 && !(errno == EAGAIN || errno == EWOULDBLOCK)) {
+			error = -errno;
+			close(fd);
+			goto clean;
+		}
+	}
+
+	if (wbytes < rsize) {
+		error = -ENOMEM;
+		close(fd);
+		goto clean;
+	}
+
+	close(fd);
+
+ clean:
+	return error;
+}
+
+int appendBucketEntry(double *gbucket, double x, double y, double aoffset)
+{
+	int error = 0;
+	double nrecords = 0;
+	int64_t boffset = 0;
+
+	if (gbucket == NULL) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	nrecords = gbucket[0];
+	boffset = 1 + nrecords * 3;
+
+	gbucket[boffset] = x;
+	gbucket[boffset + 1] = y;
+	gbucket[boffset + 2] = aoffset;
+
+	gbucket[0] += 1;
+
+ clean:
+	return error;
+}
+
+int insertGridRecord(double *gentry, double x, double y, void *record,
+		     int64_t rsize, string fname)
+{
+	int error = 0;
+	int capacity = 170;
+	double nrecords = gentry[0];
+	double avgx = gentry[1];
+	double avgy = gentry[2];
+	double *gbucket = NULL;
+	double aoffset = 0;
+	int64_t wbytes = -1;
+
+	if (nrecords >= capacity) {
+		error = -ENOMEM;
+		goto clean;
+	}
+
+	error = mapGridBucket(gentry, &gbucket, fname);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = appendRecord(&aoffset, record, rsize, fname);
+	if (error < 0) {
+		unmapGridBucket(gbucket);
+		goto clean;
+	}
+
+	error = appendBucketEntry(gbucket, x, y, aoffset);
+	if (error < 0) {
+		unmapGridBucket(gbucket);
+		goto clean;
+	}
+
+	gentry[1] = (avgx * nrecords + x) / (nrecords + 1);
+	gentry[2] = (avgy * nrecords + y) / (nrecords + 1);
+	gentry[0] += 1;
+
+ clean:
+	return error;
+}
+
 int main()
 {
 	return 0;
