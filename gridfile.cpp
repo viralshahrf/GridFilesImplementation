@@ -596,6 +596,50 @@ int insertGridRecord(double *gentry, double x, double y, void *record,
 	return error;
 }
 
+int getBucketEntry(double **bentry, double *gbucket, int64_t entry)
+{
+	int error = 0;
+	double nrecords = gbucket[0];
+
+	if (entry >= nrecords) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	*bentry = gbucket + 1 + entry * 3;
+
+ clean:
+	return error;
+}
+
+int deleteBucketEntry(double *gbucket, int64_t entry)
+{
+	int error = 0;
+	int64_t iter = 0;
+	double nrecords = gbucket[0];
+	double *cbe = NULL;
+	double *nbe = NULL;
+
+	for (iter = entry; iter < nrecords - 1; iter++) {
+		error = getBucketEntry(&cbe, gbucket, iter);
+		if (error < 0) {
+			goto clean;
+		}
+
+		error = getBucketEntry(&nbe, gbucket, iter);
+		if (error < 0) {
+			goto clean;
+		}
+
+		memcpy(cbe, nbe, 24);
+	}
+
+	gbucket[0] -= 1;
+
+ clean:
+	return error;
+}
+
 int main()
 {
 	return 0;
