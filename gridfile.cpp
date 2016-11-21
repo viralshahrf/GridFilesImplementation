@@ -442,6 +442,56 @@ int splitGrid(double *gdirectory, double *gscale, string fname, int64_t size,
 	return error;
 }
 
+int mapGridBucket(double *gentry, double **gbucket, string fname)
+{
+	int error = 0;
+	string bname = fname + "buckets";
+	int bfd = -1;
+	double baddr = gentry[3];
+	double boffset = baddr * 4096;
+
+	if (gentry == NULL) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	bfd = open(bname.c_str(), O_RDWR);
+	if (bfd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	*gbucket =
+	    (double *)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, bfd,
+			   boffset);
+	if (**gbucket == -1) {
+		error = -errno;
+		close(bfd);
+		goto clean;
+	}
+
+	close(bfd);
+
+ clean:
+	return error;
+}
+
+int unmapGridBucket(double *gbucket)
+{
+	int error = 0;
+
+	if (gbucket == NULL) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	munmap(gbucket, 4096);
+	gbucket = NULL;
+
+ clean:
+	return error;
+}
+
 int main()
 {
 	return 0;
