@@ -639,6 +639,40 @@ int deleteBucketEntry(double *gbucket, int64_t entry)
 	return error;
 }
 
+int getGridPartitions(double *gscale, double *x, double *y, int64_t lon,
+		      int64_t lat)
+{
+	int error = 0;
+	int64_t size = 0;
+	double xint = 0;
+	double yint = 0;
+	int64_t xp = 0;
+	int64_t yp = 0;
+
+	if (gscale == NULL) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	size = (int64_t) gscale[0];
+	xint = gscale[1];
+	yint = gscale[1 + size];
+
+	if (lon > xint || lat > yint) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	xp = lon - 1 < 0 ? 0 : lon - 1;
+	yp = lat - 1 < 0 ? 0 : lat - 1;
+
+	*x = gscale[2 + xp];
+	*y = gscale[2 + size + yp];
+
+ clean:
+	return error;
+}
+
 int main()
 {
 	createGrid(5, "grid");
