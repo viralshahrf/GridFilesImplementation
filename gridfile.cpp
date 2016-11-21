@@ -177,7 +177,7 @@ int getGridLocation(int64_t * lon, int64_t * lat, double x, double y,
 	return error;
 }
 
-int insertGridPartition(int lon, int partition, string fname, int64_t size)
+int insertGridPartition(int lon, double partition, string fname, int64_t size)
 {
 	int error = 0;
 	int sfd = -1;
@@ -346,6 +346,97 @@ int getGridEntry(int64_t lon, int64_t lat, double **gentry, double *gdirectory,
 	offset += lon * size * 4 + lat * 4;
 
 	*gentry = gdirectory + offset;
+
+ clean:
+	return error;
+}
+
+int splitGrid(double *gdirectory, double *gscale, string fname, int64_t size,
+	      int vertical, int64_t lon, int64_t lat, double x, double y)
+{
+	int error = 0;
+	double *ge = NULL;
+	double xint = 0;
+	double yint = 0;
+	double average = 0;
+	double nrecords = 0;
+	int64_t xiter = 0;
+	int64_t yiter = 0;
+	double *cge = NULL;
+	double *pge = NULL;
+
+	xint = gscale[1];
+	yint = gscale[size + 1];
+
+	if (vertical && xint == size - 1) {
+		error = -ENOMEM;
+		goto clean;
+	}
+
+	if (!vertical && yint == size - 1) {
+		error = -ENOMEM;
+		goto clean;
+	}
+
+	error = getGridEntry(lon, lat, &ge, gdirectory, size);
+	if (error < 0) {
+		goto clean;
+	}
+
+	nrecords = ge[0];
+
+	if (!vertical) {
+		average = ge[2];
+		average = (average * nrecords + x) / (nrecords + 1);
+
+		for (xiter = 0; xiter <= xint; xiter++) {
+			for (yiter = yint + 1; yiter > lat; yiter--) {
+				error =
+				    getGridEntry(xiter, yiter, &cge, gdirectory,
+						 size);
+				if (error < 0) {
+					goto clean;
+				}
+
+				error =
+				    getGridEntry(xiter, yiter - 1, &pge,
+						 gdirectory, size);
+				if (error < 0) {
+					goto clean;
+				}
+
+				memcpy(cge, pge, 32);
+			}
+		}
+	} else {
+		average = ge[1];
+		average = (average * nrecords + y) / (nrecords + 1);
+
+		for (yiter = 0; yiter <= yint; yiter++) {
+			for (xiter = xint + 1; xiter > lon; xiter--) {
+				error =
+				    getGridEntry(xiter, yiter, &cge, gdirectory,
+						 size);
+				if (error < 0) {
+					goto clean;
+				}
+
+				error =
+				    getGridEntry(xiter - 1, yiter, &pge,
+						 gdirectory, size);
+				if (error < 0) {
+					goto clean;
+				}
+
+				memcpy(cge, pge, 32);
+			}
+		}
+	}
+
+	error = insertGridPartition(vertical, average, fname, size);
+	if (error < 0) {
+		goto clean;
+	}
 
  clean:
 	return error;
