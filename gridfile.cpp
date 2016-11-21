@@ -506,7 +506,6 @@ int appendRecord(double *aoffset, void *record, int64_t rsize, string fname)
 	}
 
 	*aoffset = lseek(fd, 0, SEEK_END);
-	cout << *aoffset << "\n";
 
 	while (wbytes < 0) {
 		wbytes = write(fd, record, rsize);
@@ -626,7 +625,7 @@ int deleteBucketEntry(double *gbucket, int64_t entry)
 			goto clean;
 		}
 
-		error = getBucketEntry(&nbe, gbucket, iter);
+		error = getBucketEntry(&nbe, gbucket, iter + 1);
 		if (error < 0) {
 			goto clean;
 		}
@@ -642,5 +641,24 @@ int deleteBucketEntry(double *gbucket, int64_t entry)
 
 int main()
 {
+	createGrid(5, "grid");
+	double *gs = NULL;
+	mapGridScale(&gs, "grid", 5);
+	double *gd = NULL;
+	mapGridDirectory(&gd, "grid", 5);
+	double *ge = NULL;
+	getGridEntry(0, 0, &ge, gd, 5);
+	char data[] = "data";
+	insertGridRecord(ge, 1, 2, data, sizeof(data), "grid");
+	insertGridRecord(ge, 2, 3, data, sizeof(data), "grid");
+	insertGridRecord(ge, 3, 4, data, sizeof(data), "grid");
+	insertGridRecord(ge, 4, 5, data, sizeof(data), "grid");
+	insertGridRecord(ge, 5, 6, data, sizeof(data), "grid");
+	double *gb = NULL;
+	mapGridBucket(ge, &gb, "grid");
+	deleteBucketEntry(gb, 4);
+	unmapGridBucket(gb);
+	unmapGridDirectory(gd, 5);
+	unmapGridScale(gs, 5);
 	return 0;
 }
