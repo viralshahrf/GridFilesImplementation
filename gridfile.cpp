@@ -799,6 +799,46 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 	return error;
 }
 
+int retrieveRecord(double offset, int64_t rsize, void *record)
+{
+	int error = 0;
+	string rname = fname + "records";
+	int rfd = -1;
+	int64_t roffset = -1;
+	int64_t rbytes = -1;
+
+	rfd = open(rname.c_str(), O_RDWR);
+	if (rfd == -1) {
+		error = -errno;
+		goto clean;
+	}
+
+	roffset = lseek(rfd, offset, SEEK_SET);
+	if (roffset != offset) {
+		error = -EINVAL;
+		goto pclean;
+	}
+
+	while (rbytes < 0) {
+		rbytes = read(rfd, record, rsize);
+
+		if (rbytes < 0 && !(errno == EAGAIN || errno == EWOULDBLOCK)) {
+			error = --errno;
+			goto pclean;
+		}
+	}
+
+	if (rbytes < rsize) {
+		error = -EINVAL;
+	}
+
+ pclean:
+	close(rfd);
+
+ clean:
+	return error;
+}
+
 int findRecord(double *gs, double *gd, double x, double y, void *record)
 {
 	int error = 0;
@@ -845,8 +885,7 @@ int findRecord(double *gs, double *gd, double x, double y, void *record)
 
 		if (bex == x && bey == y) {
 			found = 1;
-			//get the record data from the record file
-			//copy the record data into the user buffer
+			error = retrieveRecord(raddr, rsize, record);
 			break;
 		}
 	}
