@@ -799,6 +799,69 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 	return error;
 }
 
+int findRecord(double *gs, double *gd, double x, double y, void *record)
+{
+	int error = 0;
+	int found = 0;
+	int64_t size = (int64_t) gs[0];
+	int64_t lon = 0;
+	int64_t lat = 0;
+	double *ge = NULL;
+	double *gb = NULL;
+	double nrecords = 0;
+	double *bentries = NULL;
+	int64_t iter = 0;
+	double *be = NULL;
+	double bex = 0;
+	double bey = 0;
+	double rsize = 0;
+	double raddr = 0;
+
+	getGridLocation(gs, &lon, &lat, x, y);
+
+	error = getGridEntry(lon, lat, &ge, gd, size);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = mapGridBucket(ge, &gb);
+	if (error < 0) {
+		goto clean;
+	}
+
+	nrecords = gb[0];
+	bentries = gb + 1;
+
+	for (iter = 0; iter < nrecords; iter++) {
+		error = getBucketEntry(&be, gb, iter);
+		if (error < 0) {
+			goto pclean;
+		}
+
+		bex = be[0];
+		bey = be[1];
+		rsize = (int64_t) be[2];
+		raddr = be[3];
+
+		if (bex == x && bey == y) {
+			found = 1;
+			//get the record data from the record file
+			//copy the record data into the user buffer
+			break;
+		}
+	}
+
+ pclean:
+	unmapGridBucket(gb);
+
+ clean:
+	if (!found) {
+		error = -EINVAL;
+	}
+
+	return error;
+}
+
 int main()
 {
 	int error = 0;
