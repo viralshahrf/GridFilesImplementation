@@ -813,6 +813,148 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 	return error;
 }
 
+int hasSplitBucket(int *isSplit, int *vertical, double *ge, double *gd,
+		   int64_t lon, int64_t lat, int64_t size)
+{
+	int error = 0;
+	*isSplit = 0;
+	*vertical = -1;
+	double *xge = NULL;
+	double *yge = NULL;
+
+	if (lon > 0) {
+		error = getGridEntry(lon - 1, lat, &xge, gd, size);
+		if (error < 0) {
+			goto clean;
+		}
+
+		if (ge[3] == xge[3]) {
+			*isSplit = 1;
+			*vertical = 1;
+		}
+	}
+
+	if (lat > 0) {
+		error = getGridEntry(lon, lat - 1, &yge, gd, size);
+		if (error < 0) {
+			goto clean;
+		}
+
+		if (ge[3] == yge[3]) {
+			*isSplit = 1;
+			*vertical = 0;
+		}
+	}
+
+ clean:
+	return error;
+}
+
+int insertRecord(double *gs, double *gd, double x, double y, void *record,
+		 int64_t rsize, string fname)
+{
+	int error = 0;
+	int64_t size = (int64_t) gs[0];
+	int64_t lon = 0;
+	int64_t lat = 0;
+	double *ge = NULL;
+	double nrecords = 0;
+	int capacity = 170;
+	int isSplit = -1;
+	int vertical = -1;
+	int split;
+	double xint = gs[1];
+	double yint = gs[1 + size];
+	split = xint == yint ? 1 : 0;
+
+	error = getGridLocation(&lon, &lat, x, y, fname, size);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = getGridEntry(lon, lat, &ge, gd, size);
+	if (error < 0) {
+		goto clean;
+	}
+
+	nrecords = ge[0];
+
+	if (nrecords < capacity) {
+		error = insertGridRecord(ge, x, y, record, rsize, fname);
+		if (error < 0) {
+			goto clean;
+		}
+	} else {
+		error =
+		    hasSplitBucket(&isSplit, &vertical, ge, gd, lon, lat, size);
+		if (error < 0) {
+			goto clean;
+		}
+
+		if (isSplit) {
+			ge[0] = 0;
+			ge[1] = 0;
+			ge[2] = 0;
+			ge[3] = gd[0];
+			gd[0] += 1;
+
+			if (vertical) {
+				error =
+				    splitBucket(gs, gd, vertical, lon - 1, lat,
+						lon, lat, fname);
+				if (error < 0) {
+					goto clean;
+				}
+			} else {
+				error =
+				    splitBucket(gs, gd, vertical, lon, lat - 1,
+						lon, lat, fname);
+				if (error < 0) {
+					goto clean;
+				}
+			}
+
+			error =
+			    insertRecord(gs, gd, x, y, record, rsize, fname);
+			if (error < 0) {
+				goto clean;
+			}
+		} else {
+			error =
+			    splitGrid(gd, gs, fname, size, split, lon, lat, x,
+				      y);
+			if (error < 0) {
+				goto clean;
+			}
+
+			if (split) {
+				error =
+				    splitBucket(gs, gd, split, lon, lat,
+						lon + 1, lat, fname);
+				if (error < 0) {
+					goto clean;
+				}
+			} else {
+				error =
+				    splitBucket(gs, gd, split, lon, lat, lon,
+						lat + 1, fname);
+				if (error < 0) {
+					goto clean;
+				}
+			}
+
+			error =
+			    insertRecord(gs, gd, x, y, record, rsize, fname);
+			if (error < 0) {
+				goto clean;
+			}
+		}
+	}
+
+ clean:
+	return error;
+}
+
 int main()
 {
 	int error = 0;
