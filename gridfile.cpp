@@ -437,17 +437,19 @@ int appendRecord(double *aoffset, void *record, int64_t rsize)
 	return error;
 }
 
-void appendBucketEntry(double *gbucket, double x, double y, double aoffset)
+void appendBucketEntry(double *gbucket, double x, double y, int64_t rsize,
+		       double aoffset)
 {
 	double nrecords = 0;
 	int64_t boffset = 0;
 
 	nrecords = gbucket[0];
-	boffset = 1 + nrecords * 3;
+	boffset = 1 + nrecords * 4;
 
 	gbucket[boffset] = x;
 	gbucket[boffset + 1] = y;
-	gbucket[boffset + 2] = aoffset;
+	gbucket[boffset + 2] = (double)rsize;
+	gbucket[boffset + 3] = aoffset;
 
 	gbucket[0] += 1;
 }
@@ -456,7 +458,7 @@ int insertGridRecord(double *gentry, double x, double y, void *record,
 		     int64_t rsize)
 {
 	int error = 0;
-	int capacity = 170;
+	int capacity = 127;
 	double nrecords = gentry[0];
 	double avgx = gentry[1];
 	double avgy = gentry[2];
@@ -478,7 +480,7 @@ int insertGridRecord(double *gentry, double x, double y, void *record,
 		goto pclean;
 	}
 
-	appendBucketEntry(gbucket, x, y, aoffset);
+	appendBucketEntry(gbucket, x, y, rsize, aoffset);
 
 	gentry[1] = (avgx * nrecords + x) / (nrecords + 1);
 	gentry[2] = (avgy * nrecords + y) / (nrecords + 1);
@@ -501,7 +503,7 @@ int getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 		goto clean;
 	}
 
-	*bentry = gbucket + 1 + entry * 3;
+	*bentry = gbucket + 1 + entry * 4;
 
  clean:
 	return error;
@@ -526,7 +528,7 @@ int deleteBucketEntry(double *gbucket, int64_t entry)
 			goto clean;
 		}
 
-		memcpy(cbe, nbe, 24);
+		memcpy(cbe, nbe, 32);
 	}
 
 	gbucket[0] -= 1;
@@ -626,9 +628,10 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 
 	if (vertical) {
 		while (iter < sn) {
-			cbe = bentries + iter * 3;
+			cbe = bentries + iter * 4;
 			if (cbe[0] > avgx) {
-				appendBucketEntry(db, cbe[0], cbe[1], cbe[2]);
+				appendBucketEntry(db, cbe[0], cbe[1], cbe[2],
+						  cbe[3]);
 
 				error = deleteBucketEntry(sb, iter);
 				if (error < 0) {
@@ -647,9 +650,10 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 		}
 	} else {
 		while (iter < sn) {
-			cbe = bentries + iter * 3;
+			cbe = bentries + iter * 4;
 			if (cbe[1] > avgy) {
-				appendBucketEntry(db, cbe[0], cbe[1], cbe[2]);
+				appendBucketEntry(db, cbe[0], cbe[1], cbe[2],
+						  cbe[3]);
 
 				error = deleteBucketEntry(sb, iter);
 				if (error < 0) {
