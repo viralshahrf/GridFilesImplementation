@@ -47,14 +47,12 @@ int createFile(int64_t size, string fname, const char *mode)
 int createGrid(int64_t size, string fname)
 {
 	int error = 0;
-	FILE *f = NULL;
 	int64_t ssize = (2 * size + 1) * 8;
-	int64_t dsize = (size * size) * 4 * 8 + 8;
+	int64_t dsize = (size * size) * 5 * 8 + 8;
 	int64_t bsize = (size * size) * 4096;
 	string sname = fname + "scale";
 	string dname = fname + "directory";
 	string bname = fname + "buckets";
-	string rname = fname + "records";
 	int sfd = -1;
 	int dfd = -1;
 	double *saddr = NULL;
@@ -110,14 +108,6 @@ int createGrid(int64_t size, string fname)
 	if (error < 0) {
 		goto clean;
 	}
-
-	f = fopen(rname.c_str(), "w");
-	if (f == NULL) {
-		error = -errno;
-		goto clean;
-	}
-
-	fclose(f);
 
  clean:
 	return error;
@@ -230,7 +220,7 @@ void unmapGridScale(double *gscale, int64_t size)
 int mapGridDirectory(double **gdirectory, string fname, int64_t size)
 {
 	int error = 0;
-	int64_t dsize = (size * size) * 4 * 8 + 8;
+	int64_t dsize = (size * size) * 5 * 8 + 8;
 	string dname = fname + "directory";
 	int dfd = -1;
 
@@ -255,7 +245,7 @@ int mapGridDirectory(double **gdirectory, string fname, int64_t size)
 
 void unmapGridDirectory(double *gdirectory, int64_t size)
 {
-	int64_t dsize = (size * size) * 4 * 8 + 8;
+	int64_t dsize = (size * size) * 5 * 8 + 8;
 
 	munmap(gdirectory, dsize);
 	gdirectory = NULL;
@@ -272,7 +262,7 @@ int getGridEntry(int64_t lon, int64_t lat, double **gentry, double *gdirectory,
 		goto clean;
 	}
 
-	offset += lon * size * 4 + lat * 4;
+	offset += lon * size * 5 + lat * 5;
 
 	*gentry = gdirectory + offset;
 
@@ -313,10 +303,10 @@ int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
 		goto clean;
 	}
 
-	nrecords = ge[0];
+	nrecords = ge[1];
 
 	if (!vertical) {
-		average = ge[2];
+		average = ge[3];
 		average = (average * nrecords + y) / (nrecords + 1);
 
 		for (xiter = 0; xiter <= xint; xiter++) {
@@ -335,11 +325,11 @@ int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
 					goto clean;
 				}
 
-				memcpy(cge, pge, 32);
+				memcpy(cge, pge, 40);
 			}
 		}
 	} else {
-		average = ge[1];
+		average = ge[2];
 		average = (average * nrecords + x) / (nrecords + 1);
 
 		for (yiter = 0; yiter <= yint; yiter++) {
@@ -358,7 +348,7 @@ int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
 					goto clean;
 				}
 
-				memcpy(cge, pge, 32);
+				memcpy(cge, pge, 40);
 			}
 		}
 	}
@@ -374,7 +364,7 @@ int mapGridBucket(double *gentry, double **gbucket)
 	int error = 0;
 	string bname = fname + "buckets";
 	int bfd = -1;
-	double baddr = gentry[3];
+	double baddr = gentry[4];
 	double boffset = baddr * 4096;
 
 	bfd = open(bname.c_str(), O_RDWR);
@@ -402,70 +392,39 @@ void unmapGridBucket(double *gbucket)
 	gbucket = NULL;
 }
 
-int appendRecord(double *aoffset, void *record, int64_t rsize)
-{
-	int error = 0;
-	string rname = fname + "records";
-	int fd = -1;
-	int64_t wbytes = -1;
-
-	fd = open(rname.c_str(), O_RDWR);
-	if (fd == -1) {
-		error = -errno;
-		goto clean;
-	}
-
-	*aoffset = lseek(fd, 0, SEEK_END);
-
-	while (wbytes < 0) {
-		wbytes = write(fd, record, rsize);
-
-		if (wbytes < 0 && !(errno == EAGAIN || errno == EWOULDBLOCK)) {
-			error = -errno;
-			goto pclean;
-		}
-	}
-
-	if (wbytes < rsize) {
-		error = -ENOMEM;
-	}
-
- pclean:
-	close(fd);
-
- clean:
-	return error;
-}
-
 void appendBucketEntry(double *gbucket, double x, double y, int64_t rsize,
-		       double aoffset)
+		       void *record)
 {
-	double nrecords = 0;
+	double nbytes = 0;
 	int64_t boffset = 0;
+	double *bentry = NULL;
 
-	nrecords = gbucket[0];
-	boffset = 1 + nrecords * 4;
+	nbytes = gbucket[0];
+	boffset = 16 + nbytes;
+	bentry = (double *)((char *)gbucket + boffset);
 
-	gbucket[boffset] = x;
-	gbucket[boffset + 1] = y;
-	gbucket[boffset + 2] = (double)rsize;
-	gbucket[boffset + 3] = aoffset;
+	bentry[0] = x;
+	bentry[1] = y;
+	bentry[2] = (double)rsize;
+	memcpy(bentry + 3, record, rsize);
 
-	gbucket[0] += 1;
+	gbucket[0] += double (24 + rsize);
+	gbucket[1] += 1;
 }
 
 int insertGridRecord(double *gentry, double x, double y, void *record,
 		     int64_t rsize)
 {
 	int error = 0;
-	int capacity = 127;
-	double nrecords = gentry[0];
-	double avgx = gentry[1];
-	double avgy = gentry[2];
+	double nbytes = gentry[0];
+	double nrecords = gentry[1];
+	double avgx = gentry[2];
+	double avgy = gentry[3];
+	double esize = 24 + rsize;
+	double capacity = 4096 - 16 - nbytes;
 	double *gbucket = NULL;
-	double aoffset = 0;
 
-	if (nrecords >= capacity) {
+	if (esize > capacity) {
 		error = -ENOMEM;
 		goto clean;
 	}
@@ -475,18 +434,13 @@ int insertGridRecord(double *gentry, double x, double y, void *record,
 		goto clean;
 	}
 
-	error = appendRecord(&aoffset, record, rsize);
-	if (error < 0) {
-		goto pclean;
-	}
+	appendBucketEntry(gbucket, x, y, rsize, record);
 
-	appendBucketEntry(gbucket, x, y, rsize, aoffset);
+	gentry[2] = (avgx * nrecords + x) / (nrecords + 1);
+	gentry[3] = (avgy * nrecords + y) / (nrecords + 1);
+	gentry[1] += 1;
+	gentry[0] += double (24 + rsize);
 
-	gentry[1] = (avgx * nrecords + x) / (nrecords + 1);
-	gentry[2] = (avgy * nrecords + y) / (nrecords + 1);
-	gentry[0] += 1;
-
- pclean:
 	unmapGridBucket(gbucket);
 
  clean:
@@ -496,14 +450,24 @@ int insertGridRecord(double *gentry, double x, double y, void *record,
 int getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 {
 	int error = 0;
-	double nrecords = gbucket[0];
+	double nrecords = gbucket[1];
+	char *be = (char *)gbucket + 16;
+	double *cbe = NULL;
+	double rsize = 0;
+	int64_t iter = 0;
 
 	if (entry >= nrecords) {
 		error = -EINVAL;
 		goto clean;
 	}
 
-	*bentry = gbucket + 1 + entry * 4;
+	for (iter = 0; iter < entry; iter++) {
+		cbe = (double *)be;
+		rsize = cbe[2];
+		be += int64_t(24 + rsize);
+	}
+
+	*bentry = (double *)be;
 
  clean:
 	return error;
@@ -512,26 +476,41 @@ int getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 int deleteBucketEntry(double *gbucket, int64_t entry)
 {
 	int error = 0;
-	int64_t iter = 0;
-	double nrecords = gbucket[0];
+	double nbytes = gbucket[0];
+	double nrecords = gbucket[1];
+	double cbytes = nbytes;
 	double *cbe = NULL;
 	double *nbe = NULL;
+	int64_t rsize = 0;
+	int64_t iter = 0;
 
-	for (iter = entry; iter < nrecords - 1; iter++) {
+	if (entry >= nrecords) {
+		error = -EINVAL;
+		goto clean;
+	}
+
+	for (iter = 0; iter < entry; iter++) {
 		error = getBucketEntry(&cbe, gbucket, iter);
 		if (error < 0) {
 			goto clean;
 		}
 
-		error = getBucketEntry(&nbe, gbucket, iter + 1);
-		if (error < 0) {
-			goto clean;
-		}
-
-		memcpy(cbe, nbe, 32);
+		cbytes -= (24 + cbe[2]);
 	}
 
-	gbucket[0] -= 1;
+	error = getBucketEntry(&cbe, gbucket, entry);
+	if (error < 0) {
+		goto clean;
+	}
+
+	rsize = (int64_t) cbe[2];
+	cbytes -= (24 + rsize);
+	nbe = (double *)((char *)cbe + 24 + rsize);
+
+	memmove(cbe, nbe, cbytes);
+
+	gbucket[0] -= (double)(24 + rsize);
+	gbucket[1] -= 1;
 
  clean:
 	return error;
@@ -576,7 +555,6 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 	double avgx = 0;
 	double avgy = 0;
 	int64_t iter = 0;
-	double *bentries = NULL;
 	double *cbe = NULL;
 	double ssx = 0;
 	double ssy = 0;
@@ -584,6 +562,8 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 	double dsy = 0;
 	double sn = 0;
 	double dn = 0;
+	double sbytes = 0;
+	double dbytes = 0;
 
 	if (slon > xint || slat > yint || dlon > xint || dlat > yint) {
 		error = -EINVAL;
@@ -616,68 +596,83 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 		goto clean;
 	}
 
-	bentries = sb + 1;
+	sbytes = sge[0];
+	sn = sge[1];
+	ssx = sge[2] * sn;
+	ssy = sge[3] * sn;
 
-	sn = sge[0];
-	ssx = sge[1] * sn;
-	ssy = sge[1] * sn;
-
-	dn = dge[0];
-	dsx = dge[1] * dn;
-	dsy = dge[2] * dn;
+	dbytes = dge[0];
+	dn = dge[1];
+	dsx = dge[2] * dn;
+	dsy = dge[3] * dn;
 
 	if (vertical) {
 		while (iter < sn) {
-			cbe = bentries + iter * 4;
+			error = getBucketEntry(&cbe, sb, iter);
+			if (error < 0) {
+				goto pclean;
+			}
+
 			if (cbe[0] > avgx) {
 				appendBucketEntry(db, cbe[0], cbe[1], cbe[2],
-						  cbe[3]);
+						  cbe + 3);
 
-				error = deleteBucketEntry(sb, iter);
-				if (error < 0) {
-					goto pclean;
-				}
-
+				sbytes -= (24 + cbe[2]);
+				dbytes += (24 + cbe[2]);
 				sn--;
 				dn++;
 				ssx -= cbe[0];
 				ssy -= cbe[1];
 				dsx += cbe[0];
 				dsy += cbe[1];
+
+				error = deleteBucketEntry(sb, iter);
+				if (error < 0) {
+					goto pclean;
+				}
 			} else {
 				iter++;
 			}
 		}
 	} else {
 		while (iter < sn) {
-			cbe = bentries + iter * 4;
+			error = getBucketEntry(&cbe, sb, iter);
+			if (error < 0) {
+				goto pclean;
+			}
+
 			if (cbe[1] > avgy) {
 				appendBucketEntry(db, cbe[0], cbe[1], cbe[2],
-						  cbe[3]);
+						  cbe + 3);
 
-				error = deleteBucketEntry(sb, iter);
-				if (error < 0) {
-					goto pclean;
-				}
+				sbytes -= (24 + cbe[2]);
+				dbytes += (24 + cbe[2]);
 				sn--;
 				dn++;
 				ssx -= cbe[0];
 				ssy -= cbe[1];
 				dsx += cbe[0];
 				dsy += cbe[1];
+
+				error = deleteBucketEntry(sb, iter);
+				if (error < 0) {
+					goto pclean;
+				}
 			} else {
 				iter++;
 			}
 		}
 	}
 
-	sge[0] = sn;
-	sge[1] = ssx / sn;
-	sge[2] = ssy / sn;
+	sge[0] = sbytes;
+	sge[1] = sn;
+	sge[2] = ssx / sn;
+	sge[3] = ssy / sn;
 
-	dge[0] = dn;
-	dge[1] = dsx / dn;
-	dge[2] = dsy / dn;
+	dge[0] = dbytes;
+	dge[1] = dn;
+	dge[2] = dsx / dn;
+	dge[3] = dsy / dn;
 
  pclean:
 	unmapGridBucket(sb);
@@ -702,7 +697,7 @@ int hasPairedBucket(int *isPaired, int *vertical, double *ge, double *gd,
 			goto clean;
 		}
 
-		if (ge[3] == xge[3]) {
+		if (ge[4] == xge[4]) {
 			*isPaired = 1;
 			*vertical = 1;
 		}
@@ -714,7 +709,7 @@ int hasPairedBucket(int *isPaired, int *vertical, double *ge, double *gd,
 			goto clean;
 		}
 
-		if (ge[3] == yge[3]) {
+		if (ge[4] == yge[4]) {
 			*isPaired = 1;
 			*vertical = 0;
 		}
@@ -732,8 +727,10 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 	int64_t lon = 0;
 	int64_t lat = 0;
 	double *ge = NULL;
+	double nbytes = 0;
 	double nrecords = 0;
-	int capacity = 170;
+	double capacity = 0;
+	double esize = 24 + rsize;
 	int isPaired = -1;
 	int vertical = -1;
 	int split;
@@ -748,9 +745,11 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 		goto clean;
 	}
 
-	nrecords = ge[0];
+	nbytes = ge[0];
+	nrecords = ge[1];
+	capacity = 4096 - 16 - nbytes;
 
-	if (nrecords < capacity) {
+	if (esize <= capacity) {
 		error = insertGridRecord(ge, x, y, record, rsize);
 		if (error < 0) {
 			goto clean;
@@ -767,7 +766,8 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 			ge[0] = 0;
 			ge[1] = 0;
 			ge[2] = 0;
-			ge[3] = gd[0];
+			ge[3] = 0;
+			ge[4] = gd[0];
 			gd[0] += 1;
 
 			if (vertical) {
@@ -799,46 +799,6 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 	return error;
 }
 
-int retrieveRecord(double offset, int64_t rsize, void *record)
-{
-	int error = 0;
-	string rname = fname + "records";
-	int rfd = -1;
-	int64_t roffset = -1;
-	int64_t rbytes = -1;
-
-	rfd = open(rname.c_str(), O_RDWR);
-	if (rfd == -1) {
-		error = -errno;
-		goto clean;
-	}
-
-	roffset = lseek(rfd, offset, SEEK_SET);
-	if (roffset != offset) {
-		error = -EINVAL;
-		goto pclean;
-	}
-
-	while (rbytes < 0) {
-		rbytes = read(rfd, record, rsize);
-
-		if (rbytes < 0 && !(errno == EAGAIN || errno == EWOULDBLOCK)) {
-			error = --errno;
-			goto pclean;
-		}
-	}
-
-	if (rbytes < rsize) {
-		error = -EINVAL;
-	}
-
- pclean:
-	close(rfd);
-
- clean:
-	return error;
-}
-
 int findRecord(double *gs, double *gd, double x, double y, void *record)
 {
 	int error = 0;
@@ -849,7 +809,6 @@ int findRecord(double *gs, double *gd, double x, double y, void *record)
 	double *ge = NULL;
 	double *gb = NULL;
 	double nrecords = 0;
-	double *bentries = NULL;
 	int64_t iter = 0;
 	double *be = NULL;
 	double bex = 0;
@@ -869,8 +828,7 @@ int findRecord(double *gs, double *gd, double x, double y, void *record)
 		goto clean;
 	}
 
-	nrecords = gb[0];
-	bentries = gb + 1;
+	nrecords = gb[1];
 
 	for (iter = 0; iter < nrecords; iter++) {
 		error = getBucketEntry(&be, gb, iter);
@@ -881,11 +839,10 @@ int findRecord(double *gs, double *gd, double x, double y, void *record)
 		bex = be[0];
 		bey = be[1];
 		rsize = (int64_t) be[2];
-		raddr = be[3];
 
 		if (bex == x && bey == y) {
 			found = 1;
-			error = retrieveRecord(raddr, rsize, record);
+			memcpy(record, be + 3, rsize);
 			break;
 		}
 	}
