@@ -395,13 +395,9 @@ void unmapGridBucket(double *gbucket)
 void appendBucketEntry(double *gbucket, double x, double y, int64_t rsize,
 		       void *record)
 {
-	double nbytes = 0;
-	int64_t boffset = 0;
-	double *bentry = NULL;
-
-	nbytes = gbucket[0];
-	boffset = 16 + nbytes;
-	bentry = (double *)((char *)gbucket + boffset);
+	double nbytes = gbucket[0];
+	int64_t boffset = (int64_t) (16 + nbytes);
+	double *bentry = (double *)((char *)gbucket + boffset);
 
 	bentry[0] = x;
 	bentry[1] = y;
@@ -504,7 +500,7 @@ int deleteBucketEntry(double *gbucket, int64_t entry)
 	}
 
 	rsize = (int64_t) cbe[2];
-	cbytes -= (24 + rsize);
+	cbytes -= (double)(24 + rsize);
 	nbe = (double *)((char *)cbe + 24 + rsize);
 
 	memmove(cbe, nbe, cbytes);
