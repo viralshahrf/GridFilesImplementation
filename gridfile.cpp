@@ -909,6 +909,80 @@ int deleteRecord(double *gs, double *gd, double x, double y)
 	return error;
 }
 
+int findRangeRecords(double *gs, double *gd, double x1, double y1, double x2,
+		     double y2, int64_t dsize, void *records)
+{
+	int error = 0;
+	int64_t size = (int64_t) gs[0];
+	int64_t lon1 = 0;
+	int64_t lat1 = 0;
+	int64_t lon2 = 0;
+	int64_t lat2 = 0;
+	int64_t iter = 0;
+	int64_t xiter = 0;
+	int64_t yiter = 0;
+	double *ge = NULL;
+	double *gb = NULL;
+	double *be = NULL;
+	double nrecords = 0;
+	double nr = 0;
+	double bx = 0;
+	double by = 0;
+	double bs = 0;
+	char *rrecords = (char *)records + 8;
+
+	getGridLocation(gs, &lon1, &lat1, x1, y1);
+	getGridLocation(gs, &lon2, &lat2, x2, y2);
+
+	for (xiter = lon1; xiter <= lon2; xiter++) {
+		for (yiter = lat1; yiter <= lat2; yiter++) {
+			error = getGridEntry(xiter, yiter, &ge, gd, size);
+			if (error < 0) {
+				goto clean;
+			}
+
+			error = mapGridBucket(ge, &gb);
+			if (error < 0) {
+				goto clean;
+			}
+
+			nrecords = gb[1];
+
+			for (iter = 0; iter < nrecords; iter++) {
+				error = getBucketEntry(&be, gb, iter);
+				if (error < 0) {
+					unmapGridBucket(gb);
+					goto clean;
+				}
+
+				bx = be[0];
+				by = be[1];
+				bs = be[2];
+
+				if (bx >= x1 && bx <= x2 && by >= y1
+				    && by <= y2) {
+					if ((24 + bs) <= dsize) {
+						nr += 1;
+						memcpy(rrecords, be, 24 + bs);
+						rrecords += (int64_t) (24 + bs);
+						dsize -= (24 + bs);
+					} else {
+						unmapGridBucket(gb);
+						goto clean;
+					}
+				}
+			}
+
+			unmapGridBucket(gb);
+		}
+	}
+
+	((double *)records)[0] = nr;
+
+ clean:
+	return error;
+}
+
 int main()
 {
 	int error = 0;
