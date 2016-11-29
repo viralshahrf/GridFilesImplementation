@@ -1,12 +1,13 @@
 .PHONY : make
 make :
-	g++ gridfile.cpp -o gridfile
+	g++ -c gridfile.cpp -o gridfile.o
 .PHONY : clean
 clean :
 	rm -f build \
 	*.o \
 	*.out \
 	*.cpp~ \
+	*.h~ \
 	*.a
 	rm -rf *.swp
 	rm -rf gridfile

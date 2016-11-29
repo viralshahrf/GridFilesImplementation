@@ -7,12 +7,11 @@
 #include <unistd.h>
 #include <iostream>
 #include <string>
+#include "gridfile.h"
 
 using namespace std;
 
-string fname = "grid";
-
-int createFile(int64_t size, string fname, const char *mode)
+int gridfile::createFile(int64_t size, string fname, const char *mode)
 {
 	int error = 0;
 	FILE *f = NULL;
@@ -44,26 +43,32 @@ int createFile(int64_t size, string fname, const char *mode)
 	return error;
 }
 
-int createGrid(int64_t size, string fname)
+int gridfile::createGrid(int64_t size, int64_t psize, string name)
 {
 	int error = 0;
-	int64_t ssize = (2 * size + 1) * 8;
-	int64_t dsize = (size * size) * 5 * 8 + 8;
-	int64_t bsize = (size * size) * 4096;
-	string sname = fname + "scale";
-	string dname = fname + "directory";
-	string bname = fname + "buckets";
 	int sfd = -1;
 	int dfd = -1;
 	double *saddr = NULL;
 	double *daddr = NULL;
 
-	error = createFile(ssize, sname, "w");
+	gridSize = size;
+	pageSize = psize;
+	scaleSize = (2 * gridSize + 1) * 8;
+	directorySize = (gridSize * gridSize) * 5 * 8 + 8;
+	bucketSize = (gridSize * gridSize) * pageSize;
+	gridName = name;
+	scaleName = name + "scale";
+	directoryName = name + "directory";
+	bucketName = name + "buckets";
+	gridScale = NULL;
+	gridDirectory = NULL;
+
+	error = createFile(scaleSize, scaleName, "w");
 	if (error < 0) {
 		goto clean;
 	}
 
-	sfd = open(sname.c_str(), O_RDWR);
+	sfd = open(scaleName.c_str(), O_RDWR);
 	if (sfd == -1) {
 		error = -errno;
 		goto clean;
@@ -81,12 +86,12 @@ int createGrid(int64_t size, string fname)
 	munmap(saddr, 8);
 	close(sfd);
 
-	error = createFile(dsize, dname, "w");
+	error = createFile(directorySize, directoryName, "w");
 	if (error < 0) {
 		goto clean;
 	}
 
-	dfd = open(dname.c_str(), O_RDWR);
+	dfd = open(directoryName.c_str(), O_RDWR);
 	if (dfd == -1) {
 		error = -errno;
 		goto clean;
@@ -104,7 +109,7 @@ int createGrid(int64_t size, string fname)
 	munmap(daddr, 8);
 	close(dfd);
 
-	error = createFile(bsize, bname, "w");
+	error = createFile(bucketSize, bucketName, "w");
 	if (error < 0) {
 		goto clean;
 	}
@@ -113,21 +118,19 @@ int createGrid(int64_t size, string fname)
 	return error;
 }
 
-void getGridLocation(double *gs, int64_t * lon, int64_t * lat, double x,
-		     double y)
+void gridfile::getGridLocation(int64_t * lon, int64_t * lat, double x, double y)
 {
-	int64_t size = (int64_t) gs[0];
 	double xint = 0;
 	double yint = 0;
 	double *xpart = NULL;
 	double *ypart = NULL;
 	int64_t iter = 0;
 
-	xint = gs[1];
-	yint = gs[size + 1];
+	xint = gridScale[1];
+	yint = gridScale[gridSize + 1];
 
-	xpart = gs + 2;
-	ypart = gs + 1 + size + 1;
+	xpart = gridScale + 2;
+	ypart = gridScale + 1 + gridSize + 1;
 
 	*lon = 0;
 	while (iter < xint && x > xpart[iter]) {
@@ -141,10 +144,9 @@ void getGridLocation(double *gs, int64_t * lon, int64_t * lat, double x,
 	}
 }
 
-int insertGridPartition(double *gs, int lon, double partition)
+int gridfile::insertGridPartition(int lon, double partition)
 {
 	int error = 0;
-	int64_t size = (int64_t) gs[0];
 	double ints = 0;
 	double *inta = NULL;
 	double *part = NULL;
@@ -152,16 +154,16 @@ int insertGridPartition(double *gs, int lon, double partition)
 	int64_t ipart = 0;
 
 	if (lon) {
-		ints = gs[1];
-		inta = gs + 1;
-		part = gs + 2;
+		ints = gridScale[1];
+		inta = gridScale + 1;
+		part = gridScale + 2;
 	} else {
-		ints = gs[1 + size];
-		inta = gs + 1 + size;
-		part = gs + 1 + size + 1;
+		ints = gridScale[1 + gridSize];
+		inta = gridScale + 1 + gridSize;
+		part = gridScale + 1 + gridSize + 1;
 	}
 
-	if (ints >= size - 1) {
+	if (ints >= gridSize - 1) {
 		error = -ENOMEM;
 		goto clean;
 	}
@@ -183,23 +185,21 @@ int insertGridPartition(double *gs, int lon, double partition)
 	return error;
 }
 
-int mapGridScale(double **gscale, string fname, int64_t size)
+int gridfile::mapGridScale()
 {
 	int error = 0;
-	int64_t ssize = (2 * size + 1) * 8;
-	string sname = fname + "scale";
 	int sfd = -1;
 
-	sfd = open(sname.c_str(), O_RDWR);
+	sfd = open(scaleName.c_str(), O_RDWR);
 	if (sfd == -1) {
 		error = -errno;
 		goto clean;
 	}
 
-	*gscale =
-	    (double *)mmap(NULL, ssize, PROT_READ | PROT_WRITE, MAP_SHARED, sfd,
-			   0);
-	if (**gscale == -1) {
+	gridScale =
+	    (double *)mmap(NULL, scaleSize, PROT_READ | PROT_WRITE, MAP_SHARED,
+			   sfd, 0);
+	if (*gridScale == -1) {
 		error = -errno;
 	}
 
@@ -209,31 +209,27 @@ int mapGridScale(double **gscale, string fname, int64_t size)
 	return error;
 }
 
-void unmapGridScale(double *gscale, int64_t size)
+void gridfile::unmapGridScale()
 {
-	int64_t ssize = (2 * size + 1) * 8;
-
-	munmap(gscale, ssize);
-	gscale = NULL;
+	munmap(gridScale, scaleSize);
+	gridScale = NULL;
 }
 
-int mapGridDirectory(double **gdirectory, string fname, int64_t size)
+int gridfile::mapGridDirectory()
 {
 	int error = 0;
-	int64_t dsize = (size * size) * 5 * 8 + 8;
-	string dname = fname + "directory";
 	int dfd = -1;
 
-	dfd = open(dname.c_str(), O_RDWR);
+	dfd = open(directoryName.c_str(), O_RDWR);
 	if (dfd == -1) {
 		error = -errno;
 		goto clean;
 	}
 
-	*gdirectory =
-	    (double *)mmap(NULL, dsize, PROT_READ | PROT_WRITE, MAP_SHARED, dfd,
-			   0);
-	if (**gdirectory == -1) {
+	gridDirectory =
+	    (double *)mmap(NULL, directorySize, PROT_READ | PROT_WRITE,
+			   MAP_SHARED, dfd, 0);
+	if (*gridDirectory == -1) {
 		error = -errno;
 	}
 
@@ -243,38 +239,34 @@ int mapGridDirectory(double **gdirectory, string fname, int64_t size)
 	return error;
 }
 
-void unmapGridDirectory(double *gdirectory, int64_t size)
+void gridfile::unmapGridDirectory()
 {
-	int64_t dsize = (size * size) * 5 * 8 + 8;
-
-	munmap(gdirectory, dsize);
-	gdirectory = NULL;
+	munmap(gridDirectory, directorySize);
+	gridDirectory = NULL;
 }
 
-int getGridEntry(int64_t lon, int64_t lat, double **gentry, double *gdirectory,
-		 int64_t size)
+int gridfile::getGridEntry(int64_t lon, int64_t lat, double **gentry)
 {
 	int error = 0;
 	int64_t offset = 1;
 
-	if (lon >= size || lat >= size) {
+	if (lon >= gridSize || lat >= gridSize) {
 		error = -EINVAL;
 		goto clean;
 	}
 
-	offset += lon * size * 5 + lat * 5;
+	offset += lon * gridSize * 5 + lat * 5;
 
-	*gentry = gdirectory + offset;
+	*gentry = gridDirectory + offset;
 
  clean:
 	return error;
 }
 
-int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
-	      int64_t lat, double x, double y)
+int gridfile::splitGrid(int vertical, int64_t lon, int64_t lat, double x,
+			double y)
 {
 	int error = 0;
-	int64_t size = (int64_t) gscale[0];
 	double *ge = NULL;
 	double xint = 0;
 	double yint = 0;
@@ -285,20 +277,20 @@ int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
 	double *cge = NULL;
 	double *pge = NULL;
 
-	xint = gscale[1];
-	yint = gscale[size + 1];
+	xint = gridScale[1];
+	yint = gridScale[gridSize + 1];
 
-	if (vertical && xint == size - 1) {
+	if (vertical && xint == gridSize - 1) {
 		error = -ENOMEM;
 		goto clean;
 	}
 
-	if (!vertical && yint == size - 1) {
+	if (!vertical && yint == gridSize - 1) {
 		error = -ENOMEM;
 		goto clean;
 	}
 
-	error = getGridEntry(lon, lat, &ge, gdirectory, size);
+	error = getGridEntry(lon, lat, &ge);
 	if (error < 0) {
 		goto clean;
 	}
@@ -311,16 +303,12 @@ int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
 
 		for (xiter = 0; xiter <= xint; xiter++) {
 			for (yiter = yint + 1; yiter > lat; yiter--) {
-				error =
-				    getGridEntry(xiter, yiter, &cge, gdirectory,
-						 size);
+				error = getGridEntry(xiter, yiter, &cge);
 				if (error < 0) {
 					goto clean;
 				}
 
-				error =
-				    getGridEntry(xiter, yiter - 1, &pge,
-						 gdirectory, size);
+				error = getGridEntry(xiter, yiter - 1, &pge);
 				if (error < 0) {
 					goto clean;
 				}
@@ -334,16 +322,12 @@ int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
 
 		for (yiter = 0; yiter <= yint; yiter++) {
 			for (xiter = xint + 1; xiter > lon; xiter--) {
-				error =
-				    getGridEntry(xiter, yiter, &cge, gdirectory,
-						 size);
+				error = getGridEntry(xiter, yiter, &cge);
 				if (error < 0) {
 					goto clean;
 				}
 
-				error =
-				    getGridEntry(xiter - 1, yiter, &pge,
-						 gdirectory, size);
+				error = getGridEntry(xiter - 1, yiter, &pge);
 				if (error < 0) {
 					goto clean;
 				}
@@ -353,29 +337,28 @@ int splitGrid(double *gdirectory, double *gscale, int vertical, int64_t lon,
 		}
 	}
 
-	error = insertGridPartition(gscale, vertical, average);
+	error = insertGridPartition(vertical, average);
 
  clean:
 	return error;
 }
 
-int mapGridBucket(double *gentry, double **gbucket)
+int gridfile::mapGridBucket(double *gentry, double **gbucket)
 {
 	int error = 0;
-	string bname = fname + "buckets";
 	int bfd = -1;
 	double baddr = gentry[4];
-	double boffset = baddr * 4096;
+	double boffset = baddr * pageSize;
 
-	bfd = open(bname.c_str(), O_RDWR);
+	bfd = open(bucketName.c_str(), O_RDWR);
 	if (bfd == -1) {
 		error = -errno;
 		goto clean;
 	}
 
 	*gbucket =
-	    (double *)mmap(NULL, 4096, PROT_READ | PROT_WRITE, MAP_SHARED, bfd,
-			   boffset);
+	    (double *)mmap(NULL, pageSize, PROT_READ | PROT_WRITE, MAP_SHARED,
+			   bfd, boffset);
 	if (**gbucket == -1) {
 		error = -errno;
 	}
@@ -386,14 +369,14 @@ int mapGridBucket(double *gentry, double **gbucket)
 	return error;
 }
 
-void unmapGridBucket(double *gbucket)
+void gridfile::unmapGridBucket(double *gbucket)
 {
-	munmap(gbucket, 4096);
+	munmap(gbucket, pageSize);
 	gbucket = NULL;
 }
 
-void appendBucketEntry(double *gbucket, double x, double y, int64_t rsize,
-		       void *record)
+void gridfile::appendBucketEntry(double *gbucket, double x, double y,
+				 int64_t rsize, void *record)
 {
 	double nbytes = gbucket[0];
 	int64_t boffset = (int64_t) (16 + nbytes);
@@ -408,8 +391,8 @@ void appendBucketEntry(double *gbucket, double x, double y, int64_t rsize,
 	gbucket[1] += 1;
 }
 
-int insertGridRecord(double *gentry, double x, double y, void *record,
-		     int64_t rsize)
+int gridfile::insertGridRecord(double *gentry, double x, double y, void *record,
+			       int64_t rsize)
 {
 	int error = 0;
 	double nbytes = gentry[0];
@@ -417,7 +400,7 @@ int insertGridRecord(double *gentry, double x, double y, void *record,
 	double avgx = gentry[2];
 	double avgy = gentry[3];
 	double esize = 24 + rsize;
-	double capacity = 4096 - 16 - nbytes;
+	double capacity = pageSize - 16 - nbytes;
 	double *gbucket = NULL;
 
 	if (esize > capacity) {
@@ -443,7 +426,7 @@ int insertGridRecord(double *gentry, double x, double y, void *record,
 	return error;
 }
 
-int getBucketEntry(double **bentry, double *gbucket, int64_t entry)
+int gridfile::getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 {
 	int error = 0;
 	double nrecords = gbucket[1];
@@ -469,7 +452,7 @@ int getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 	return error;
 }
 
-int deleteBucketEntry(double *gbucket, int64_t entry)
+int gridfile::deleteBucketEntry(double *gbucket, int64_t entry)
 {
 	int error = 0;
 	double nbytes = gbucket[0];
@@ -512,13 +495,11 @@ int deleteBucketEntry(double *gbucket, int64_t entry)
 	return error;
 }
 
-int getGridPartitions(double *gscale, double *x, double *y, int64_t lon,
-		      int64_t lat)
+int gridfile::getGridPartitions(double *x, double *y, int64_t lon, int64_t lat)
 {
 	int error = 0;
-	int64_t size = (int64_t) gscale[0];
-	double xint = gscale[1];
-	double yint = gscale[1 + size];
+	double xint = gridScale[1];
+	double yint = gridScale[1 + gridSize];
 	int64_t xp = 0;
 	int64_t yp = 0;
 
@@ -530,24 +511,23 @@ int getGridPartitions(double *gscale, double *x, double *y, int64_t lon,
 	xp = lon - 1 < 0 ? 0 : lon - 1;
 	yp = lat - 1 < 0 ? 0 : lat - 1;
 
-	*x = gscale[2 + xp];
-	*y = gscale[2 + size + yp];
+	*x = gridScale[2 + xp];
+	*y = gridScale[2 + gridSize + yp];
 
  clean:
 	return error;
 }
 
-int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
-		int64_t slat, int64_t dlon, int64_t dlat)
+int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
+			  int64_t dlon, int64_t dlat)
 {
 	int error = 0;
 	double *sge = NULL;
 	double *dge = NULL;
 	double *sb = NULL;
 	double *db = NULL;
-	int64_t size = (int64_t) gscale[0];
-	double xint = gscale[1];
-	double yint = gscale[1 + size];
+	double xint = gridScale[1];
+	double yint = gridScale[1 + gridSize];
 	double avgx = 0;
 	double avgy = 0;
 	int64_t iter = 0;
@@ -566,17 +546,17 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 		goto clean;
 	}
 
-	error = getGridEntry(slon, slat, &sge, gdirectory, size);
+	error = getGridEntry(slon, slat, &sge);
 	if (error < 0) {
 		goto clean;
 	}
 
-	error == getGridEntry(dlon, dlat, &dge, gdirectory, size);
+	error == getGridEntry(dlon, dlat, &dge);
 	if (error < 0) {
 		goto clean;
 	}
 
-	error = getGridPartitions(gscale, &avgx, &avgy, dlon, dlat);
+	error = getGridPartitions(&avgx, &avgy, dlon, dlat);
 	if (error < 0) {
 		goto clean;
 	}
@@ -678,8 +658,8 @@ int splitBucket(double *gscale, double *gdirectory, int vertical, int64_t slon,
 	return error;
 }
 
-int hasPairedBucket(int *isPaired, int *vertical, double *ge, double *gd,
-		    int64_t lon, int64_t lat, int64_t size)
+int gridfile::hasPairedBucket(int *isPaired, int *vertical, double *ge,
+			      int64_t lon, int64_t lat)
 {
 	int error = 0;
 	*isPaired = 0;
@@ -688,7 +668,7 @@ int hasPairedBucket(int *isPaired, int *vertical, double *ge, double *gd,
 	double *yge = NULL;
 
 	if (lon > 0) {
-		error = getGridEntry(lon - 1, lat, &xge, gd, size);
+		error = getGridEntry(lon - 1, lat, &xge);
 		if (error < 0) {
 			goto clean;
 		}
@@ -700,7 +680,7 @@ int hasPairedBucket(int *isPaired, int *vertical, double *ge, double *gd,
 	}
 
 	if (lat > 0) {
-		error = getGridEntry(lon, lat - 1, &yge, gd, size);
+		error = getGridEntry(lon, lat - 1, &yge);
 		if (error < 0) {
 			goto clean;
 		}
@@ -715,11 +695,9 @@ int hasPairedBucket(int *isPaired, int *vertical, double *ge, double *gd,
 	return error;
 }
 
-int insertRecord(double *gs, double *gd, double x, double y, void *record,
-		 int64_t rsize)
+int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 {
 	int error = 0;
-	int64_t size = (int64_t) gs[0];
 	int64_t lon = 0;
 	int64_t lat = 0;
 	double *ge = NULL;
@@ -730,20 +708,20 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 	int isPaired = -1;
 	int vertical = -1;
 	int split;
-	double xint = gs[1];
-	double yint = gs[1 + size];
+	double xint = gridScale[1];
+	double yint = gridScale[1 + gridSize];
 	split = xint == yint ? 1 : 0;
 
-	getGridLocation(gs, &lon, &lat, x, y);
+	getGridLocation(&lon, &lat, x, y);
 
-	error = getGridEntry(lon, lat, &ge, gd, size);
+	error = getGridEntry(lon, lat, &ge);
 	if (error < 0) {
 		goto clean;
 	}
 
 	nbytes = ge[0];
 	nrecords = ge[1];
-	capacity = 4096 - 16 - nbytes;
+	capacity = pageSize - 16 - nbytes;
 
 	if (esize <= capacity) {
 		error = insertGridRecord(ge, x, y, record, rsize);
@@ -751,9 +729,7 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 			goto clean;
 		}
 	} else {
-		error =
-		    hasPairedBucket(&isPaired, &vertical, ge, gd, lon, lat,
-				    size);
+		error = hasPairedBucket(&isPaired, &vertical, ge, lon, lat);
 		if (error < 0) {
 			goto clean;
 		}
@@ -763,43 +739,42 @@ int insertRecord(double *gs, double *gd, double x, double y, void *record,
 			ge[1] = 0;
 			ge[2] = 0;
 			ge[3] = 0;
-			ge[4] = gd[0];
-			gd[0] += 1;
+			ge[4] = gridDirectory[0];
+			gridDirectory[0] += 1;
 
 			if (vertical) {
 				error =
-				    splitBucket(gs, gd, vertical, lon - 1, lat,
-						lon, lat);
+				    splitBucket(vertical, lon - 1, lat, lon,
+						lat);
 				if (error < 0) {
 					goto clean;
 				}
 			} else {
 				error =
-				    splitBucket(gs, gd, vertical, lon, lat - 1,
-						lon, lat);
+				    splitBucket(vertical, lon, lat - 1, lon,
+						lat);
 				if (error < 0) {
 					goto clean;
 				}
 			}
 		} else {
-			error = splitGrid(gd, gs, split, lon, lat, x, y);
+			error = splitGrid(split, lon, lat, x, y);
 			if (error < 0) {
 				goto clean;
 			}
 		}
 
-		error = insertRecord(gs, gd, x, y, record, rsize);
+		error = insertRecord(x, y, record, rsize);
 	}
 
  clean:
 	return error;
 }
 
-int findRecord(double *gs, double *gd, double x, double y, void *record)
+int gridfile::findRecord(double x, double y, void *record)
 {
 	int error = 0;
 	int found = 0;
-	int64_t size = (int64_t) gs[0];
 	int64_t lon = 0;
 	int64_t lat = 0;
 	double *ge = NULL;
@@ -811,9 +786,9 @@ int findRecord(double *gs, double *gd, double x, double y, void *record)
 	double bey = 0;
 	double rsize = 0;
 
-	getGridLocation(gs, &lon, &lat, x, y);
+	getGridLocation(&lon, &lat, x, y);
 
-	error = getGridEntry(lon, lat, &ge, gd, size);
+	error = getGridEntry(lon, lat, &ge);
 	if (error < 0) {
 		goto clean;
 	}
@@ -853,11 +828,10 @@ int findRecord(double *gs, double *gd, double x, double y, void *record)
 	return error;
 }
 
-int deleteRecord(double *gs, double *gd, double x, double y)
+int gridfile::deleteRecord(double x, double y)
 {
 	int error = 0;
 	int found = 0;
-	int64_t size = (int64_t) gs[0];
 	int64_t lon = 0;
 	int64_t lat = 0;
 	double *ge = NULL;
@@ -868,9 +842,9 @@ int deleteRecord(double *gs, double *gd, double x, double y)
 	double bex = 0;
 	double bey = 0;
 
-	getGridLocation(gs, &lon, &lat, x, y);
+	getGridLocation(&lon, &lat, x, y);
 
-	error = getGridEntry(lon, lat, &ge, gd, size);
+	error = getGridEntry(lon, lat, &ge);
 	if (error < 0) {
 		goto clean;
 	}
@@ -909,11 +883,10 @@ int deleteRecord(double *gs, double *gd, double x, double y)
 	return error;
 }
 
-int findRangeRecords(double *gs, double *gd, double x1, double y1, double x2,
-		     double y2, int64_t dsize, void *records)
+int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
+			       int64_t dsize, void *records)
 {
 	int error = 0;
-	int64_t size = (int64_t) gs[0];
 	int64_t lon1 = 0;
 	int64_t lat1 = 0;
 	int64_t lon2 = 0;
@@ -931,12 +904,12 @@ int findRangeRecords(double *gs, double *gd, double x1, double y1, double x2,
 	double bs = 0;
 	char *rrecords = (char *)records + 8;
 
-	getGridLocation(gs, &lon1, &lat1, x1, y1);
-	getGridLocation(gs, &lon2, &lat2, x2, y2);
+	getGridLocation(&lon1, &lat1, x1, y1);
+	getGridLocation(&lon2, &lat2, x2, y2);
 
 	for (xiter = lon1; xiter <= lon2; xiter++) {
 		for (yiter = lat1; yiter <= lat2; yiter++) {
-			error = getGridEntry(xiter, yiter, &ge, gd, size);
+			error = getGridEntry(xiter, yiter, &ge);
 			if (error < 0) {
 				goto clean;
 			}
@@ -980,87 +953,5 @@ int findRangeRecords(double *gs, double *gd, double x1, double y1, double x2,
 	((double *)records)[0] = nr;
 
  clean:
-	return error;
-}
-
-int main()
-{
-	int error = 0;
-	double *gs = NULL;
-	double *gd = NULL;
-	double *ge = NULL;
-	double *sge = NULL;
-	char data[] = "data";
-
-	error = createGrid(5, fname);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = mapGridScale(&gs, fname, 5);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = mapGridDirectory(&gd, fname, 5);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridPartition(gs, 1, 2.5);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = getGridEntry(0, 0, &ge, gd, 5);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = getGridEntry(1, 0, &sge, gd, 5);
-	if (error < 0) {
-		goto clean;
-	}
-
-	sge[0] = 0;
-	sge[1] = 0;
-	sge[2] = 0;
-	sge[3] = gd[0];
-
-	error = insertGridRecord(ge, 1, 2, data, sizeof(data));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridRecord(ge, 2, 3, data, sizeof(data));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridRecord(ge, 3, 4, data, sizeof(data));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridRecord(ge, 4, 5, data, sizeof(data));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridRecord(ge, 5, 6, data, sizeof(data));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = splitBucket(gs, gd, 1, 0, 0, 1, 0);
-	if (error < 0) {
-		goto clean;
-	}
-
-	unmapGridDirectory(gd, 5);
-	unmapGridScale(gs, 5);
-
- clean:
-	cout << "error: " << error << "\n";
 	return error;
 }
