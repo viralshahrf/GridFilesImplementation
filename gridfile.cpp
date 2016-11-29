@@ -955,3 +955,27 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
  clean:
 	return error;
 }
+
+int gridfile::loadGrid()
+{
+	int error = 0;
+
+	error = mapGridScale();
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = mapGridDirectory();
+	if (error < 0) {
+		unmapGridScale();
+	}
+
+ clean:
+	return error;
+}
+
+void gridfile::unloadGrid()
+{
+	unmapGridScale();
+	unmapGridDirectory();
+}
