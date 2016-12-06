@@ -525,10 +525,9 @@ int gridfile::updatePairedBuckets(int direction, int64_t lon, int64_t lat,
 				  int64_t baddr)
 {
 	int error = 0;
+	int compare = 0;
 	int64_t xint = (int64_t) gridScale[1];
 	int64_t yint = (int64_t) gridScale[1 + gridSize];
-	int64_t xiter = 0;
-	int64_t yiter = 0;
 	double *ge = NULL;
 	double *pge = NULL;
 
@@ -538,57 +537,81 @@ int gridfile::updatePairedBuckets(int direction, int64_t lon, int64_t lat,
 	}
 
 	if (direction >= 0) {
-		for (xiter = lon + 1; xiter <= xint; xiter++) {
-			error = getGridEntry(xiter, lat, &pge);
+		if (lon < xint) {
+			error = getGridEntry(lon + 1, lat, &pge);
 			if (error < 0) {
 				goto clean;
 			}
 
-			if (baddr == (int64_t) pge[4]) {
+			compare = memcmp(pge, ge, 40);
+
+			if (!compare && baddr == (int64_t) pge[4]) {
 				memcpy(pge, ge, 40);
-			} else {
-				break;
+				error =
+				    updatePairedBuckets(direction, lon + 1, lat,
+							baddr);
+				if (error < 0) {
+					goto clean;
+				}
 			}
 		}
 
-		for (yiter = lat + 1; yiter <= yint; yiter++) {
-			error = getGridEntry(lon, yiter, &pge);
+		if (lat < yint) {
+			error = getGridEntry(lon, lat + 1, &pge);
 			if (error < 0) {
 				goto clean;
 			}
 
-			if (baddr == (int64_t) pge[4]) {
+			compare = memcmp(pge, ge, 40);
+
+			if (!compare && baddr == (int64_t) pge[4]) {
 				memcpy(pge, ge, 40);
-			} else {
-				break;
+				error =
+				    updatePairedBuckets(direction, lon, lat + 1,
+							baddr);
+				if (error < 0) {
+					goto clean;
+				}
 			}
 		}
 	}
 
 	if (direction <= 0) {
-		for (xiter = lon - 1; xiter >= 0; xiter--) {
-			error = getGridEntry(xiter, lat, &pge);
+		if (lon > 0) {
+			error = getGridEntry(lon - 1, lat, &pge);
 			if (error < 0) {
 				goto clean;
 			}
 
-			if (baddr == (int64_t) pge[4]) {
+			compare = memcmp(pge, ge, 40);
+
+			if (!compare && baddr == (int64_t) pge[4]) {
 				memcpy(pge, ge, 40);
-			} else {
-				break;
+				error =
+				    updatePairedBuckets(direction, lon - 1, lat,
+							baddr);
+				if (error < 0) {
+					goto clean;
+				}
 			}
 		}
 
-		for (yiter = lat - 1; yiter >= 0; yiter--) {
-			error = getGridEntry(lon, yiter, &pge);
+		if (lat > 0) {
+			error = getGridEntry(lon, lat - 1, &pge);
 			if (error < 0) {
 				goto clean;
 			}
 
-			if (baddr == (int64_t) pge[4]) {
+			compare = memcmp(pge, ge, 40);
+
+			if (!compare && baddr == (int64_t) pge[4]) {
 				memcpy(pge, ge, 40);
-			} else {
-				break;
+				error =
+				    updatePairedBuckets(direction, lon, lat - 1,
+							baddr);
+				if (error < 0) {
+					goto clean;
+				}
 			}
 		}
 	}
@@ -738,12 +761,12 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 	dge[2] = dsx / dn;
 	dge[3] = dsy / dn;
 
-	error = updatePairedBuckets(-1, slon, slat, (int64_t) sge[4]);
+	error = updatePairedBuckets(1, dlon, dlat, dbaddr);
 	if (error < 0) {
 		goto pclean;
 	}
 
-	error = updatePairedBuckets(1, dlon, dlat, dbaddr);
+	error = updatePairedBuckets(0, slon, slat, (int64_t) sge[4]);
 
  pclean:
 	unmapGridBucket(sb);
