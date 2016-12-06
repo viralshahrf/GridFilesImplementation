@@ -43,13 +43,16 @@ int gridfile::createFile(int64_t size, string fname, const char *mode)
 	return error;
 }
 
-int gridfile::createGrid(int64_t size, int64_t psize, string name)
+int gridfile::createGrid(struct gridconfig *configuration)
 {
 	int error = 0;
 	int sfd = -1;
 	int dfd = -1;
 	double *saddr = NULL;
 	double *daddr = NULL;
+	int64_t size = configuration->size;
+	int64_t psize = configuration->psize;
+	string name = configuration->name;
 
 	gridSize = size;
 	pageSize = psize;

@@ -3,6 +3,12 @@
 
 using namespace std;
 
+struct gridconfig {
+	int64_t size;
+	int64_t psize;
+	string name;
+};
+
 struct gridfile {
  private:
 	int64_t gridSize;
@@ -43,7 +49,7 @@ struct gridfile {
 	int updatePairedBuckets(int direction, int64_t lon, int64_t lat,
 				int64_t baddr);
  public:
-	int createGrid(int64_t size, int64_t psize, string name);
+	int createGrid(struct gridconfig *configuration);
 	int loadGrid();
 	int insertRecord(double x, double y, void *record, int64_t rsize);
 	int findRecord(double x, double y, void **record);
