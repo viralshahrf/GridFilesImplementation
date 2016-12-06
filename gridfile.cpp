@@ -34,7 +34,6 @@ int gridfile::createFile(int64_t size, string fname, const char *mode)
 	error = fseek(f, 0, SEEK_SET);
 	if (error) {
 		error = -errno;
-		goto pclean;
 	}
 
  pclean:
@@ -121,14 +120,14 @@ int gridfile::createGrid(int64_t size, int64_t psize, string name)
 
 void gridfile::getGridLocation(int64_t * lon, int64_t * lat, double x, double y)
 {
-	double xint = 0;
-	double yint = 0;
+	int64_t xint = 0;
+	int64_t yint = 0;
 	double *xpart = NULL;
 	double *ypart = NULL;
 	int64_t iter = 0;
 
-	xint = gridScale[1];
-	yint = gridScale[gridSize + 1];
+	xint = (int64_t) gridScale[1];
+	yint = (int64_t) gridScale[gridSize + 1];
 
 	xpart = gridScale + 2;
 	ypart = gridScale + 1 + gridSize + 1;
@@ -148,18 +147,18 @@ void gridfile::getGridLocation(int64_t * lon, int64_t * lat, double x, double y)
 int gridfile::insertGridPartition(int lon, double partition)
 {
 	int error = 0;
-	double ints = 0;
+	int64_t ints = 0;
 	double *inta = NULL;
 	double *part = NULL;
 	int64_t iter = 0;
 	int64_t ipart = 0;
 
 	if (lon) {
-		ints = gridScale[1];
+		ints = (int64_t) gridScale[1];
 		inta = gridScale + 1;
 		part = gridScale + 2;
 	} else {
-		ints = gridScale[1 + gridSize];
+		ints = (int64_t) gridScale[1 + gridSize];
 		inta = gridScale + 1 + gridSize;
 		part = gridScale + 1 + gridSize + 1;
 	}
@@ -269,17 +268,17 @@ int gridfile::splitGrid(int vertical, int64_t lon, int64_t lat, double x,
 {
 	int error = 0;
 	double *ge = NULL;
-	double xint = 0;
-	double yint = 0;
+	int64_t xint = 0;
+	int64_t yint = 0;
 	double average = 0;
-	double nrecords = 0;
+	int64_t nrecords = 0;
 	int64_t xiter = 0;
 	int64_t yiter = 0;
 	double *cge = NULL;
 	double *pge = NULL;
 
-	xint = gridScale[1];
-	yint = gridScale[gridSize + 1];
+	xint = (int64_t) gridScale[1];
+	yint = (int64_t) gridScale[gridSize + 1];
 
 	if (vertical && xint == gridSize - 1) {
 		error = -ENOMEM;
@@ -296,7 +295,7 @@ int gridfile::splitGrid(int vertical, int64_t lon, int64_t lat, double x,
 		goto clean;
 	}
 
-	nrecords = ge[1];
+	nrecords = (int64_t) ge[1];
 
 	if (!vertical) {
 		average = ge[3];
@@ -348,8 +347,8 @@ int gridfile::mapGridBucket(double *gentry, double **gbucket)
 {
 	int error = 0;
 	int bfd = -1;
-	double baddr = gentry[4];
-	double boffset = baddr * pageSize;
+	int64_t baddr = (int64_t) gentry[4];
+	int64_t boffset = baddr * pageSize;
 
 	bfd = open(bucketName.c_str(), O_RDWR);
 	if (bfd == -1) {
@@ -379,7 +378,7 @@ void gridfile::unmapGridBucket(double *gbucket)
 void gridfile::appendBucketEntry(double *gbucket, double x, double y,
 				 int64_t rsize, void *record)
 {
-	double nbytes = gbucket[0];
+	int64_t nbytes = (int64_t) gbucket[0];
 	int64_t boffset = (int64_t) (16 + nbytes);
 	double *bentry = (double *)((char *)gbucket + boffset);
 
@@ -396,12 +395,12 @@ int gridfile::insertGridRecord(double *gentry, double x, double y, void *record,
 			       int64_t rsize)
 {
 	int error = 0;
-	double nbytes = gentry[0];
-	double nrecords = gentry[1];
+	int64_t nbytes = (int64_t) gentry[0];
+	int64_t nrecords = (int64_t) gentry[1];
 	double avgx = gentry[2];
 	double avgy = gentry[3];
-	double esize = 24 + rsize;
-	double capacity = pageSize - 16 - nbytes;
+	int64_t esize = 24 + rsize;
+	int64_t capacity = pageSize - 16 - nbytes;
 	double *gbucket = NULL;
 
 	if (esize > capacity) {
@@ -430,10 +429,10 @@ int gridfile::insertGridRecord(double *gentry, double x, double y, void *record,
 int gridfile::getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 {
 	int error = 0;
-	double nrecords = gbucket[1];
+	int64_t nrecords = (int64_t) gbucket[1];
 	char *be = (char *)gbucket + 16;
 	double *cbe = NULL;
-	double rsize = 0;
+	int64_t rsize = 0;
 	int64_t iter = 0;
 
 	if (entry >= nrecords) {
@@ -443,8 +442,8 @@ int gridfile::getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 
 	for (iter = 0; iter < entry; iter++) {
 		cbe = (double *)be;
-		rsize = cbe[2];
-		be += int64_t(24 + rsize);
+		rsize = (int64_t) cbe[2];
+		be += (24 + rsize);
 	}
 
 	*bentry = (double *)be;
@@ -456,9 +455,9 @@ int gridfile::getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 int gridfile::deleteBucketEntry(double *gbucket, int64_t entry)
 {
 	int error = 0;
-	double nbytes = gbucket[0];
-	double nrecords = gbucket[1];
-	double cbytes = nbytes;
+	int64_t nbytes = (int64_t) gbucket[0];
+	int64_t nrecords = (int64_t) gbucket[1];
+	int64_t cbytes = nbytes;
 	double *cbe = NULL;
 	double *nbe = NULL;
 	int64_t rsize = 0;
@@ -475,7 +474,7 @@ int gridfile::deleteBucketEntry(double *gbucket, int64_t entry)
 			goto clean;
 		}
 
-		cbytes -= (24 + cbe[2]);
+		cbytes -= (24 + (int64_t) cbe[2]);
 	}
 
 	error = getBucketEntry(&cbe, gbucket, entry);
@@ -484,7 +483,7 @@ int gridfile::deleteBucketEntry(double *gbucket, int64_t entry)
 	}
 
 	rsize = (int64_t) cbe[2];
-	cbytes -= (double)(24 + rsize);
+	cbytes -= (24 + rsize);
 	nbe = (double *)((char *)cbe + 24 + rsize);
 
 	memmove(cbe, nbe, cbytes);
@@ -499,8 +498,8 @@ int gridfile::deleteBucketEntry(double *gbucket, int64_t entry)
 int gridfile::getGridPartitions(double *x, double *y, int64_t lon, int64_t lat)
 {
 	int error = 0;
-	double xint = gridScale[1];
-	double yint = gridScale[1 + gridSize];
+	int64_t xint = (int64_t) gridScale[1];
+	int64_t yint = (int64_t) gridScale[1 + gridSize];
 	int64_t xp = 0;
 	int64_t yp = 0;
 
@@ -527,8 +526,8 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 	double *dge = NULL;
 	double *sb = NULL;
 	double *db = NULL;
-	double xint = gridScale[1];
-	double yint = gridScale[1 + gridSize];
+	int64_t xint = (int64_t) gridScale[1];
+	int64_t yint = (int64_t) gridScale[1 + gridSize];
 	double avgx = 0;
 	double avgy = 0;
 	int64_t iter = 0;
@@ -537,10 +536,10 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 	double ssy = 0;
 	double dsx = 0;
 	double dsy = 0;
-	double sn = 0;
-	double dn = 0;
-	double sbytes = 0;
-	double dbytes = 0;
+	int64_t sn = 0;
+	int64_t dn = 0;
+	int64_t sbytes = 0;
+	int64_t dbytes = 0;
 
 	if (slon > xint || slat > yint || dlon > xint || dlat > yint) {
 		error = -EINVAL;
@@ -573,13 +572,13 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 		goto clean;
 	}
 
-	sbytes = sge[0];
-	sn = sge[1];
+	sbytes = (int64_t) sge[0];
+	sn = (int64_t) sge[1];
 	ssx = sge[2] * sn;
 	ssy = sge[3] * sn;
 
-	dbytes = dge[0];
-	dn = dge[1];
+	dbytes = (int64_t) dge[0];
+	dn = (int64_t) dge[1];
 	dsx = dge[2] * dn;
 	dsy = dge[3] * dn;
 
@@ -594,8 +593,8 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 				appendBucketEntry(db, cbe[0], cbe[1], cbe[2],
 						  cbe + 3);
 
-				sbytes -= (24 + cbe[2]);
-				dbytes += (24 + cbe[2]);
+				sbytes -= (24 + (int64_t) cbe[2]);
+				dbytes += (24 + (int64_t) cbe[2]);
 				sn--;
 				dn++;
 				ssx -= cbe[0];
@@ -622,8 +621,8 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 				appendBucketEntry(db, cbe[0], cbe[1], cbe[2],
 						  cbe + 3);
 
-				sbytes -= (24 + cbe[2]);
-				dbytes += (24 + cbe[2]);
+				sbytes -= (24 + (int64_t) cbe[2]);
+				dbytes += (24 + (int64_t) cbe[2]);
 				sn--;
 				dn++;
 				ssx -= cbe[0];
@@ -641,13 +640,13 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 		}
 	}
 
-	sge[0] = sbytes;
-	sge[1] = sn;
+	sge[0] = (double)sbytes;
+	sge[1] = (double)sn;
 	sge[2] = ssx / sn;
 	sge[3] = ssy / sn;
 
-	dge[0] = dbytes;
-	dge[1] = dn;
+	dge[0] = (double)dbytes;
+	dge[1] = (double)dn;
 	dge[2] = dsx / dn;
 	dge[3] = dsy / dn;
 
@@ -702,15 +701,15 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 	int64_t lon = 0;
 	int64_t lat = 0;
 	double *ge = NULL;
-	double nbytes = 0;
-	double nrecords = 0;
-	double capacity = 0;
-	double esize = 24 + rsize;
+	int64_t nbytes = 0;
+	int64_t nrecords = 0;
+	int64_t capacity = 0;
+	int64_t esize = 24 + rsize;
 	int isPaired = -1;
 	int vertical = -1;
 	int split;
-	double xint = gridScale[1];
-	double yint = gridScale[1 + gridSize];
+	int64_t xint = (int64_t) gridScale[1];
+	int64_t yint = (int64_t) gridScale[1 + gridSize];
 	split = xint == yint ? 1 : 0;
 
 	getGridLocation(&lon, &lat, x, y);
@@ -720,8 +719,8 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 		goto clean;
 	}
 
-	nbytes = ge[0];
-	nrecords = ge[1];
+	nbytes = (int64_t) ge[0];
+	nrecords = (int64_t) ge[1];
 	capacity = pageSize - 16 - nbytes;
 
 	if (esize <= capacity) {
@@ -780,7 +779,7 @@ int gridfile::findRecord(double x, double y, void **record)
 	int64_t lat = 0;
 	double *ge = NULL;
 	double *gb = NULL;
-	double nrecords = 0;
+	int64_t nrecords = 0;
 	int64_t iter = 0;
 	double *be = NULL;
 	double bex = 0;
@@ -805,7 +804,7 @@ int gridfile::findRecord(double x, double y, void **record)
 		goto clean;
 	}
 
-	nrecords = gb[1];
+	nrecords = (int64_t) gb[1];
 
 	for (iter = 0; iter < nrecords; iter++) {
 		error = getBucketEntry(&be, gb, iter);
@@ -843,7 +842,7 @@ int gridfile::deleteRecord(double x, double y)
 	int64_t lat = 0;
 	double *ge = NULL;
 	double *gb = NULL;
-	double nrecords = 0;
+	int64_t nrecords = 0;
 	int64_t iter = 0;
 	double *be = NULL;
 	double bex = 0;
@@ -861,7 +860,7 @@ int gridfile::deleteRecord(double x, double y)
 		goto clean;
 	}
 
-	nrecords = gb[1];
+	nrecords = (int64_t) gb[1];
 
 	for (iter = 0; iter < nrecords; iter++) {
 		error = getBucketEntry(&be, gb, iter);
@@ -904,11 +903,11 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 	double *ge = NULL;
 	double *gb = NULL;
 	double *be = NULL;
-	double nrecords = 0;
-	double nr = 0;
+	int64_t nrecords = 0;
+	int64_t nr = 0;
 	double bx = 0;
 	double by = 0;
-	double bs = 0;
+	int64_t bs = 0;
 	int64_t rsize = 0;
 	char *rrecords = (char *)records + 8;
 
@@ -936,7 +935,7 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 				goto clean;
 			}
 
-			nrecords = gb[1];
+			nrecords = (int64_t) gb[1];
 
 			for (iter = 0; iter < nrecords; iter++) {
 				error = getBucketEntry(&be, gb, iter);
@@ -947,7 +946,7 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 
 				bx = be[0];
 				by = be[1];
-				bs = be[2];
+				bs = (int64_t) be[2];
 
 				if (bx >= x1 && bx <= x2 && by >= y1
 				    && by <= y2) {
@@ -962,7 +961,7 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 		}
 	}
 
-	((double *)records)[0] = nr;
+	((double *)records)[0] = (double)nr;
 
  clean:
 	return error;
