@@ -12,6 +12,16 @@
 
 using namespace std;
 
+/* Creates a file of the given size and with the given access mode
+
+   Parameters:
+   size: Required size of the new file
+   fname: Name of the new file as per convention
+   mode: Access mode of the new file
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::createFile(int64_t size, string fname, const char *mode)
 {
 	int error = 0;
@@ -43,6 +53,14 @@ int gridfile::createFile(int64_t size, string fname, const char *mode)
 	return error;
 }
 
+/* Creates grid files and initializes grid parameters
+
+   Parameters:
+   configuration: Elists grid size, page size and grid name
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::createGrid(struct gridconfig *configuration)
 {
 	int error = 0;
@@ -121,6 +139,14 @@ int gridfile::createGrid(struct gridconfig *configuration)
 	return error;
 }
 
+/* Fetches grid longitude and latitude for given coordinates from grid scale
+
+   Parameters:
+   lon: Grid longitude for given coordinates is stored
+   lat: Grid latitude for given coordinates is stored
+   x: Coordinate (x) of record
+   y: Coordinate (y) of record
+*/
 void gridfile::getGridLocation(int64_t * lon, int64_t * lat, double x, double y)
 {
 	int64_t xint = 0;
@@ -147,6 +173,15 @@ void gridfile::getGridLocation(int64_t * lon, int64_t * lat, double x, double y)
 	}
 }
 
+/* Inserts new grid partition in grid scale
+
+   Parameters:
+   lon: Zero for latitude, one for latitude
+   partition: Value of partition to be inserted
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::insertGridPartition(int lon, double partition)
 {
 	int error = 0;
@@ -188,6 +223,11 @@ int gridfile::insertGridPartition(int lon, double partition)
 	return error;
 }
 
+/* Maps grid scale file into memory
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::mapGridScale()
 {
 	int error = 0;
@@ -212,12 +252,19 @@ int gridfile::mapGridScale()
 	return error;
 }
 
+/* Unmaps grid scale file from memory
+*/
 void gridfile::unmapGridScale()
 {
 	munmap(gridScale, scaleSize);
 	gridScale = NULL;
 }
 
+/* Maps grid directory file into memory
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::mapGridDirectory()
 {
 	int error = 0;
@@ -242,12 +289,24 @@ int gridfile::mapGridDirectory()
 	return error;
 }
 
+/* Unmaps grid directory file from memory
+*/
 void gridfile::unmapGridDirectory()
 {
 	munmap(gridDirectory, directorySize);
 	gridDirectory = NULL;
 }
 
+/* Fetches grid entry in grid directory for given coordinates
+
+   Paramters:
+   lon: Grid longitude of record
+   lat: Grid latitude of record
+   gentry: Grid entry for given coordinates is stored
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::getGridEntry(int64_t lon, int64_t lat, double **gentry)
 {
 	int error = 0;
@@ -266,6 +325,18 @@ int gridfile::getGridEntry(int64_t lon, int64_t lat, double **gentry)
 	return error;
 }
 
+/* Splits grid in one direction with new grid entries sharing buckets
+
+   Parameters:
+   vertical: Zero for latitude wise, one for longitude wise
+   lon: Grid longitude along which to split if vertical
+   lat: Grid latitude along which to split if not vertical
+   x: Coordinate (x) of new record
+   y: Coordinate (y) of new record
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::splitGrid(int vertical, int64_t lon, int64_t lat, double x,
 			double y)
 {
@@ -346,6 +417,15 @@ int gridfile::splitGrid(int vertical, int64_t lon, int64_t lat, double x,
 	return error;
 }
 
+/* Maps grid bucket into memory for given grid entry
+
+   Parameters:
+   gentry: Grid entry of bucket to be mapped
+   gbucket: Mapped grid bucket is stored
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::mapGridBucket(double *gentry, double **gbucket)
 {
 	int error = 0;
@@ -372,12 +452,26 @@ int gridfile::mapGridBucket(double *gentry, double **gbucket)
 	return error;
 }
 
+/* Unmaps grid bucket from memory
+
+   Parameters:
+   gbucket: Grid bucket to be unmapped
+*/
 void gridfile::unmapGridBucket(double *gbucket)
 {
 	munmap(gbucket, pageSize);
 	gbucket = NULL;
 }
 
+/* Appends x, y, record size and record at the end of the bucket
+
+   Parameters:
+   gbucket: Bucket in which entry must be appended
+   x: Coordinate (x) for new record
+   y: Coordinate (y) for new record
+   rsize: Size of record data
+   record: Buffer holding record data
+*/
 void gridfile::appendBucketEntry(double *gbucket, double x, double y,
 				 int64_t rsize, void *record)
 {
@@ -394,6 +488,18 @@ void gridfile::appendBucketEntry(double *gbucket, double x, double y,
 	gbucket[1] += 1;
 }
 
+/* Inserts new record into bucket, updating bucket and grid entry statistics
+
+   Parameters:
+   gentry: Grid entry for given coordinates of record
+   x: Coordinate (x) of new record
+   y: Coordinate (y) of new record
+   record: Buffer holding record data
+   rsize: Size of record data
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::insertGridRecord(double *gentry, double x, double y, void *record,
 			       int64_t rsize)
 {
@@ -429,6 +535,16 @@ int gridfile::insertGridRecord(double *gentry, double x, double y, void *record,
 	return error;
 }
 
+/* Fetches bucket entry from mapped grid bucket
+
+   Parameters:
+   bentry: Bucket entry is stored
+   gbucket: Mapped grid bucket for given entry
+   entry: Position of the bucket entry in mapped grid bucket
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 {
 	int error = 0;
@@ -455,6 +571,15 @@ int gridfile::getBucketEntry(double **bentry, double *gbucket, int64_t entry)
 	return error;
 }
 
+/* Deletes bucket entry from mapped grid bucket
+
+   Parameters:
+   gbucket: Mapped grid bucket for given entry
+   entry: Position of the bucket entry in mapped grid bucket
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::deleteBucketEntry(double *gbucket, int64_t entry)
 {
 	int error = 0;
@@ -498,6 +623,17 @@ int gridfile::deleteBucketEntry(double *gbucket, int64_t entry)
 	return error;
 }
 
+/* Fetches grid partitions for given grid coordinates
+
+   Parameters:
+   x: Grid partition (x) is stored
+   y: Grid partition (y) is stored
+   lon: Grid longitude
+   lat: Grid latitude
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::getGridPartitions(double *x, double *y, int64_t lon, int64_t lat)
 {
 	int error = 0;
@@ -521,6 +657,17 @@ int gridfile::getGridPartitions(double *x, double *y, int64_t lon, int64_t lat)
 	return error;
 }
 
+/* Updates paired buckets in given direction with statistics and address
+
+   Parameters:
+   direction: Negative for backwards, one for forwards, zero for both
+   lon: Grid longitude
+   lat: Grid latitude
+   baddr: Bucket address for checking pairing
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::updatePairedBuckets(int direction, int64_t lon, int64_t lat,
 				  int64_t baddr)
 {
@@ -620,6 +767,18 @@ int gridfile::updatePairedBuckets(int direction, int64_t lon, int64_t lat,
 	return error;
 }
 
+/* Divides entries of paired buckets into individual bcukets
+
+   Paramters:
+   vertical: Zero for latitude wise, one for longitude wise
+   slon: Source bucket grid longitude
+   slat: Source bucket grid latitude
+   dlon: Source bucket grid longitude
+   dlat: Source bucket grid latitude
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 			  int64_t dlon, int64_t dlat)
 {
@@ -776,6 +935,18 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 	return error;
 }
 
+/* Checks if paired bucket for given bucket exists
+
+   Parameters:
+   isPaired: Zero if unpaired, one if paired is stored
+   vertical: Zero if latitude wise, one if longitude wise is stored
+   ge: Grid entry for given bucket
+   lon: Grid longitude of given bucket
+   lat: Grid latitude of given bucket
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::hasPairedBucket(int *isPaired, int *vertical, double *ge,
 			      int64_t lon, int64_t lat)
 {
@@ -813,6 +984,17 @@ int gridfile::hasPairedBucket(int *isPaired, int *vertical, double *ge,
 	return error;
 }
 
+/* Inserts new record in the grid
+
+   Parameters:
+   x: Coordinate (x) of new record
+   y: Coordinate (y) of new record
+   record: Buffer holding record data
+   rsize: Size of new record
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 {
 	int error = 0;
@@ -887,6 +1069,16 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 	return error;
 }
 
+/* Retrieves record for given coordinates
+
+   Parameters:
+   x: Coordinate (x) of record to be retrieved
+   y: Coordinate (y) of record to be retrieved
+   record: Buffer holding retrieved record
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::findRecord(double x, double y, void **record)
 {
 	int error = 0;
@@ -950,6 +1142,15 @@ int gridfile::findRecord(double x, double y, void **record)
 	return error;
 }
 
+/* Deletes record for given coordinates
+
+   Parameters:
+   x: Coordinate (x) pf record to be deleted
+   y: Coordinate (y) of record to be deleted
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::deleteRecord(double x, double y)
 {
 	int error = 0;
@@ -1016,6 +1217,19 @@ int gridfile::deleteRecord(double x, double y)
 	return error;
 }
 
+/* Retrieves record withing the specified coordinate range
+
+   Parameters:
+   x1: Coordinate (x) representing lower left corner of range
+   y1: Coordinate (y) representing lower left corner of range
+   x2: Coordinate (x) representing upper right corner of range
+   y2: Coordinate (y) represeting upper left corner of range
+   dsize: Number of bytes written in the buffer
+   records: Buffer holding retrieved records
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 			       int64_t * dsize, void **records)
 {
@@ -1094,6 +1308,11 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 	return error;
 }
 
+/* Maps grid scale file and grid directory file into memory
+
+   Return:
+   Zero on success, error on failure
+*/
 int gridfile::loadGrid()
 {
 	int error = 0;
@@ -1112,6 +1331,8 @@ int gridfile::loadGrid()
 	return error;
 }
 
+/* Unmaps grid scale file and grid scale directory from memory
+*/
 void gridfile::unloadGrid()
 {
 	unmapGridScale();
