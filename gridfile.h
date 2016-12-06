@@ -1,6 +1,14 @@
 #ifndef UTILITIES_HPP
 #define UTILITIES_HPP
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+#include <string.h>
+#include <unistd.h>
+#include <iostream>
+#include <string>
+
 using namespace std;
 
 struct gridconfig {

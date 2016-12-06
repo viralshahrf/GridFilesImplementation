@@ -1,13 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
 #include <errno.h>
-#include <string.h>
 #include <sys/mman.h>
 #include <fcntl.h>
-#include <unistd.h>
-#include <iostream>
-#include <string>
 #include "gridfile.h"
 
 using namespace std;
@@ -442,6 +435,7 @@ int gridfile::mapGridBucket(double *gentry, double **gbucket)
 	*gbucket =
 	    (double *)mmap(NULL, pageSize, PROT_READ | PROT_WRITE, MAP_SHARED,
 			   bfd, boffset);
+
 	if (**gbucket == -1) {
 		error = -errno;
 	}
@@ -1250,7 +1244,9 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 	double by = 0;
 	int64_t bs = 0;
 	int64_t rsize = 0;
-	char *rrecords = (char *)records + 8;
+	char *rrecords = NULL;
+	int isPaired = 0;
+	int vertical = -1;
 
 	getGridLocation(&lon1, &lat1, x1, y1);
 	getGridLocation(&lon2, &lat2, x2, y2);
@@ -1269,6 +1265,17 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 			error = getGridEntry(xiter, yiter, &ge);
 			if (error < 0) {
 				goto clean;
+			}
+
+			error =
+			    hasPairedBucket(&isPaired, &vertical, ge, xiter,
+					    yiter);
+			if (error < 0) {
+				goto clean;
+			}
+
+			if ((xiter > lon1 || yiter > lat1) && isPaired) {
+				continue;
 			}
 
 			error = mapGridBucket(ge, &gb);
@@ -1302,7 +1309,7 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 		}
 	}
 
-	((double *)records)[0] = (double)nr;
+	((double *)*records)[0] = (double)nr;
 
  clean:
 	return error;

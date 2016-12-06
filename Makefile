@@ -1,6 +1,8 @@
 .PHONY : make
 make :
 	g++ -c gridfile.cpp -o gridfile.o
+	g++ -c test.cpp -o test.o
+	g++ gridfile.o test.o -o test
 .PHONY : clean
 clean :
 	rm -f build \
@@ -9,9 +11,8 @@ clean :
 	*.cpp~ \
 	*.h~ \
 	*.a
+	rm -rf test
 	rm -rf *.swp
-	rm -rf gridfile
-	rm -rf gridscale
-	rm -rf griddirectory
-	rm -rf gridbuckets
-	rm -rf gridrecords
+	rm -rf *scale
+	rm -rf *directory
+	rm -rf *buckets
