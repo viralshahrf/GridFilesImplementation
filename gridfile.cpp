@@ -518,6 +518,47 @@ int gridfile::getGridPartitions(double *x, double *y, int64_t lon, int64_t lat)
 	return error;
 }
 
+int gridfile::updatePairedBuckets(int64_t lon, int64_t lat, int64_t baddr)
+{
+	int error = 0;
+	int64_t xint = (int64_t) gridScale[1];
+	int64_t yint = (int64_t) gridScale[1 + gridSize];
+	int64_t xiter = 0;
+	int64_t yiter = 0;
+	double *ge = NULL;
+	double *pge = NULL;
+
+	error = getGridEntry(lon, lat, &ge);
+	if (error < 0) {
+		goto clean;
+	}
+
+	for (xiter = 0; xiter < xint; xiter++) {
+		error = getGridEntry(xiter, lat, &pge);
+		if (error < 0) {
+			goto clean;
+		}
+
+		if (baddr == (int64_t) pge[4] && xiter != lon) {
+			memcpy(pge, ge, 40);
+		}
+	}
+
+	for (yiter = 0; yiter < yint; yiter++) {
+		error = getGridEntry(lon, yiter, &pge);
+		if (error < 0) {
+			goto clean;
+		}
+
+		if (baddr == (int64_t) pge[4] && yiter != lat) {
+			memcpy(pge, ge, 40);
+		}
+	}
+
+ clean:
+	return error;
+}
+
 int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 			  int64_t dlon, int64_t dlat)
 {
@@ -540,6 +581,7 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 	int64_t dn = 0;
 	int64_t sbytes = 0;
 	int64_t dbytes = 0;
+	int64_t dbaddr = 0;
 
 	if (slon > xint || slat > yint || dlon > xint || dlat > yint) {
 		error = -EINVAL;
@@ -555,6 +597,14 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 	if (error < 0) {
 		goto clean;
 	}
+
+	dge[0] = 0;
+	dge[1] = 0;
+	dge[2] = 0;
+	dge[3] = 0;
+	dbaddr = (int64_t) dge[4];
+	dge[4] = gridDirectory[0];
+	gridDirectory[0] += 1;
 
 	error = getGridPartitions(&avgx, &avgy, dlon, dlat);
 	if (error < 0) {
@@ -650,6 +700,13 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
 	dge[2] = dsx / dn;
 	dge[3] = dsy / dn;
 
+	error = updatePairedBuckets(slon, slat, (int64_t) sge[4]);
+	if (error < 0) {
+		goto pclean;
+	}
+
+	error = updatePairedBuckets(dlon, dlat, dbaddr);
+
  pclean:
 	unmapGridBucket(sb);
 	unmapGridBucket(db);
@@ -728,6 +785,11 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 		if (error < 0) {
 			goto clean;
 		}
+
+		error = updatePairedBuckets(lon, lat, (int64_t) ge[4]);
+		if (error < 0) {
+			goto clean;
+		}
 	} else {
 		error = hasPairedBucket(&isPaired, &vertical, ge, lon, lat);
 		if (error < 0) {
@@ -735,13 +797,6 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 		}
 
 		if (isPaired) {
-			ge[0] = 0;
-			ge[1] = 0;
-			ge[2] = 0;
-			ge[3] = 0;
-			ge[4] = gridDirectory[0];
-			gridDirectory[0] += 1;
-
 			if (vertical) {
 				error =
 				    splitBucket(vertical, lon - 1, lat, lon,

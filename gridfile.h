@@ -40,6 +40,7 @@ struct gridfile {
 			int64_t dlat);
 	int hasPairedBucket(int *isPaired, int *vertical, double *ge,
 			    int64_t lon, int64_t lat);
+	int updatePairedBuckets(int64_t lon, int64_t lat, int64_t baddr);
  public:
 	int createGrid(int64_t size, int64_t psize, string name);
 	int loadGrid();
