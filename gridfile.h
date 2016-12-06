@@ -44,10 +44,10 @@ struct gridfile {
 	int createGrid(int64_t size, int64_t psize, string name);
 	int loadGrid();
 	int insertRecord(double x, double y, void *record, int64_t rsize);
-	int findRecord(double x, double y, void *record);
+	int findRecord(double x, double y, void **record);
 	int deleteRecord(double x, double y);
 	int findRangeRecords(double x1, double y1, double x2, double y2,
-			     int64_t dsize, void *records);
+			     int64_t * dsize, void **records);
 	void unloadGrid();
 };
 

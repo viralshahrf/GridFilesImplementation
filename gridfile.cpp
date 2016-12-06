@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <errno.h>
 #include <string.h>
@@ -771,7 +772,7 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 	return error;
 }
 
-int gridfile::findRecord(double x, double y, void *record)
+int gridfile::findRecord(double x, double y, void **record)
 {
 	int error = 0;
 	int found = 0;
@@ -785,6 +786,12 @@ int gridfile::findRecord(double x, double y, void *record)
 	double bex = 0;
 	double bey = 0;
 	double rsize = 0;
+
+	*record = (void *)malloc(pageSize);
+	if (*record == NULL) {
+		error = -ENOMEM;
+		goto clean;
+	}
 
 	getGridLocation(&lon, &lat, x, y);
 
@@ -812,7 +819,7 @@ int gridfile::findRecord(double x, double y, void *record)
 
 		if (bex == x && bey == y) {
 			found = 1;
-			memcpy(record, be + 3, rsize);
+			memcpy(*record, be + 3, rsize);
 			break;
 		}
 	}
@@ -884,7 +891,7 @@ int gridfile::deleteRecord(double x, double y)
 }
 
 int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
-			       int64_t dsize, void *records)
+			       int64_t * dsize, void **records)
 {
 	int error = 0;
 	int64_t lon1 = 0;
@@ -902,10 +909,20 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 	double bx = 0;
 	double by = 0;
 	double bs = 0;
+	int64_t rsize = 0;
 	char *rrecords = (char *)records + 8;
 
 	getGridLocation(&lon1, &lat1, x1, y1);
 	getGridLocation(&lon2, &lat2, x2, y2);
+
+	rsize = (lon2 - lon1 + 1) * (lat2 - lat1 + 1) * pageSize;
+	*records = (void *)malloc(rsize);
+	if (*records == NULL) {
+		error = -ENOMEM;
+		goto clean;
+	}
+
+	rrecords = (char *)(*records) + 8;
 
 	for (xiter = lon1; xiter <= lon2; xiter++) {
 		for (yiter = lat1; yiter <= lat2; yiter++) {
@@ -934,15 +951,10 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 
 				if (bx >= x1 && bx <= x2 && by >= y1
 				    && by <= y2) {
-					if ((24 + bs) <= dsize) {
-						nr += 1;
-						memcpy(rrecords, be, 24 + bs);
-						rrecords += (int64_t) (24 + bs);
-						dsize -= (24 + bs);
-					} else {
-						unmapGridBucket(gb);
-						goto clean;
-					}
+					nr += 1;
+					memcpy(rrecords, be, 24 + bs);
+					rrecords += (int64_t) (24 + bs);
+					*dsize += (24 + bs);
 				}
 			}
 
