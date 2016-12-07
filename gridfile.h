@@ -52,8 +52,7 @@ struct gridfile {
 	int getGridPartitions(double *x, double *y, int64_t lon, int64_t lat);
 	int splitBucket(int vertical, int64_t slon, int64_t slat, int64_t dlon,
 			int64_t dlat);
-	int hasPairedBucket(int *isPaired, int *vertical, double *ge,
-			    int64_t lon, int64_t lat);
+	int hasPairedBucket(int direction, int *isPaired, int *vertical, int *forward, int64_t lon, int64_t lat);
 	int updatePairedBuckets(int direction, int64_t lon, int64_t lat,
 				int64_t baddr);
  public:

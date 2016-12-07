@@ -941,36 +941,76 @@ int gridfile::splitBucket(int vertical, int64_t slon, int64_t slat,
    Return:
    Zero on success, error on failure
 */
-int gridfile::hasPairedBucket(int *isPaired, int *vertical, double *ge,
-			      int64_t lon, int64_t lat)
+int gridfile::hasPairedBucket(int direction, int *isPaired, int *vertical, int *forward, int64_t lon, int64_t lat)
 {
 	int error = 0;
 	*isPaired = 0;
-	*vertical = -1;
+	*vertical = 0;
+	*forward = 0;
+	int64_t xint = (int64_t)gridScale[1];
+	int64_t yint = (int64_t)gridScale[1 + gridSize];
+	double *ge = NULL;
 	double *xge = NULL;
 	double *yge = NULL;
 
-	if (lon > 0) {
-		error = getGridEntry(lon - 1, lat, &xge);
-		if (error < 0) {
-			goto clean;
+	error = getGridEntry(lon, lat, &ge);
+	if (error < 0) {
+		goto clean;
+	}
+
+	if (direction <= 0) {
+		if (lon > 0) {
+			error = getGridEntry(lon - 1, lat, &xge);
+			if (error < 0) {
+				goto clean;
+			}
+
+			if ((int64_t) ge[4] == (int64_t) xge[4]) {
+				*isPaired = 1;
+				*vertical = 1;
+				goto clean;
+			}
 		}
 
-		if ((int64_t) ge[4] == (int64_t) xge[4]) {
-			*isPaired = 1;
-			*vertical = 1;
+		if (lat > 0) {
+			error = getGridEntry(lon, lat - 1, &yge);
+			if (error < 0) {
+				goto clean;
+			}
+
+			if ((int64_t) ge[4] == (int64_t) yge[4]) {
+				*isPaired = 1;
+				goto clean;
+			}
 		}
 	}
 
-	if (lat > 0) {
-		error = getGridEntry(lon, lat - 1, &yge);
-		if (error < 0) {
-			goto clean;
+	if (direction >= 0) {
+		if (lon < xint) {
+			error = getGridEntry(lon + 1, lat, &xge);
+			if (error < 0) {
+				goto clean;
+			}
+
+			if ((int64_t) ge[4] == (int64_t) xge[4]) {
+				*isPaired = 1;
+				*vertical = 1;
+				*forward = 1;
+				goto clean;
+			}
 		}
 
-		if ((int64_t) ge[4] == (int64_t) yge[4]) {
-			*isPaired = 1;
-			*vertical = 0;
+		if (lat < yint) {
+			error= getGridEntry(lon, lat + 1, &yge);
+			if (error < 0) {
+				goto clean;
+			}
+
+			if ((int64_t) ge[4] == (int64_t) yge[4]) {
+				*isPaired = 1;
+				*forward = 1;
+				goto clean;
+			}
 		}
 	}
 
@@ -1001,6 +1041,7 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 	int64_t esize = 24 + rsize;
 	int isPaired = -1;
 	int vertical = -1;
+	int forward = -1;
 	int split;
 	int64_t xint = (int64_t) gridScale[1];
 	int64_t yint = (int64_t) gridScale[1 + gridSize];
@@ -1028,26 +1069,28 @@ int gridfile::insertRecord(double x, double y, void *record, int64_t rsize)
 			goto clean;
 		}
 	} else {
-		error = hasPairedBucket(&isPaired, &vertical, ge, lon, lat);
+		error = hasPairedBucket(0, &isPaired, &vertical, &forward, lon, lat);
 		if (error < 0) {
 			goto clean;
 		}
 
 		if (isPaired) {
 			if (vertical) {
-				error =
-				    splitBucket(vertical, lon - 1, lat, lon,
-						lat);
-				if (error < 0) {
-					goto clean;
+				if (forward) {
+					error = splitBucket(vertical, lon, lat, lon + 1, lat);
+				} else {
+					error = splitBucket(vertical, lon - 1, lat, lon, lat);
 				}
 			} else {
-				error =
-				    splitBucket(vertical, lon, lat - 1, lon,
-						lat);
-				if (error < 0) {
-					goto clean;
+				if (forward) {
+					error = splitBucket(vertical, lon, lat, lon, lat + 1);
+				} else {
+					error = splitBucket(vertical, lon, lat - 1, lon, lat);
 				}
+			}
+
+			if (error < 0) {
+				goto clean;
 			}
 		} else {
 			error = splitGrid(split, lon, lat, x, y);
@@ -1247,6 +1290,7 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 	char *rrecords = NULL;
 	int isPaired = 0;
 	int vertical = -1;
+	int forward = -1;
 
 	getGridLocation(&lon1, &lat1, x1, y1);
 	getGridLocation(&lon2, &lat2, x2, y2);
@@ -1267,9 +1311,7 @@ int gridfile::findRangeRecords(double x1, double y1, double x2, double y2,
 				goto clean;
 			}
 
-			error =
-			    hasPairedBucket(&isPaired, &vertical, ge, xiter,
-					    yiter);
+			error = hasPairedBucket(-1, &isPaired, &vertical, &forward, xiter, yiter);
 			if (error < 0) {
 				goto clean;
 			}
