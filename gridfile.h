@@ -68,6 +68,7 @@ struct gridfile {
 	int loadGrid();
 	void unloadGrid();
 	int insertRecord(int64_t x, int64_t y, void *record, int64_t rsize);
+	int findRecord(int64_t x, int64_t y, void **record);
 	int testFunctionality();
 };
 

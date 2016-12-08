@@ -6,6 +6,7 @@
 #define PSIZE 4096
 #define NAME "db"
 #define NRECORDS 8000000
+#define FRECORD 666
 
 int main()
 {
@@ -17,6 +18,8 @@ int main()
 	void *record = NULL;
 	struct gridconfig vconfig;
 	struct gridfile vgrid;
+	int64_t fx = 0;
+	int64_t fy = 0;
 
 	vconfig.size = SIZE;
 	vconfig.psize = PSIZE;
@@ -35,12 +38,22 @@ int main()
 	for (iter = 0; iter < NRECORDS; iter++) {
 		getRandomRecord(&x, &y, &rsize, &record);
 
+		if (iter == FRECORD) {
+			fx = x;
+			fy = y;
+		}
+
 		error = vgrid.insertRecord(x, y, record, rsize);
 		if (error < 0) {
 			goto pclean;
 		}
 
 		free(record);
+	}
+
+	error = vgrid.findRecord(fx, fy, &record);
+	if (error < 0) {
+		goto clean;
 	}
 
  pclean:

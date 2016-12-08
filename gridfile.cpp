@@ -1177,6 +1177,79 @@ int gridfile::insertRecord(int64_t x, int64_t y, void *record, int64_t rsize)
 	return error;
 }
 
+/* Retrieves record for given coordinates
+
+   Parameters:
+   x: Coordinate (x) of record to be retrieved
+   y: Coordinate (y) of record to be retrieved
+   record: Buffer to hold retrieved record
+
+   Return:
+   Zero on success, error on failure
+*/
+int gridfile::findRecord(int64_t x, int64_t y, void **record)
+{
+	int error = 0;
+	int found = 0;
+	int64_t lon = 0;
+	int64_t lat = 0;
+	int64_t *ge = NULL;
+	int64_t *gb = NULL;
+	int64_t nrecords = 0;
+	int64_t iter = 0;
+	int64_t *be = NULL;
+	int64_t bex = 0;
+	int64_t bey = 0;
+	int64_t rsize = 0;
+
+	*record = (void *)malloc(pageSize);
+	if (*record == NULL) {
+		error = -ENOMEM;
+		goto clean;
+	}
+
+	getGridLocation(&lon, &lat, x, y);
+
+	error = getGridEntry(lon, lat, &ge);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = mapGridBucket(ge, &gb);
+	if (error < 0) {
+		goto clean;
+	}
+
+	nrecords = gb[1];
+
+	for (iter = 0; iter < nrecords; iter++) {
+		error = getBucketEntry(&be, gb, iter);
+		if (error < 0) {
+			goto pclean;
+		}
+
+		bex = be[0];
+		bey = be[1];
+		rsize = be[2];
+
+		if (bex == x && bey == y) {
+			found = 1;
+			memcpy(*record, be + 3, rsize);
+			break;
+		}
+	}
+
+ pclean:
+	unmapGridBucket(gb);
+
+ clean:
+	if (!found) {
+		error = -EINVAL;
+	}
+
+	return error;
+}
+
 int gridfile::testFunctionality()
 {
 	int error = 0;
