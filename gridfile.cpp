@@ -700,6 +700,7 @@ int gridfile::splitGrid(int vertical, int64_t lon, int64_t lat, int64_t x,
    Return:
    Zero on success, error on failure
 */
+
 int gridfile::updateBucket(int direction, int64_t slon, int64_t slat,
 			   int64_t dlon, int64_t dlat, int64_t baddr)
 {
@@ -743,6 +744,7 @@ int gridfile::updateBucket(int direction, int64_t slon, int64_t slat,
    Return:
    Zero on success, error on failure
 */
+
 int gridfile::updatePairedBuckets(int direction, int64_t lon, int64_t lat,
 				  int64_t baddr)
 {
@@ -1329,100 +1331,108 @@ int gridfile::deleteRecord(int64_t x, int64_t y)
 	return error;
 }
 
-int gridfile::testFunctionality()
+/* Retrieves record within specified coordinate range
+
+   Parameters:
+   x1: Coordinate (x) representing lower left corner of range
+   y1: Coordinate (y) representing lower left corner of range
+   x2: Coordinate (x) representing upper right corner of range
+   y2: Coordinate (y) represeting upper left corner of range
+   dsize: Number of bytes written in buffer is stored
+   records: Buffer to hold retrieved records
+
+   Return:
+   Zero on success, error on failure
+*/
+int gridfile::findRangeRecords(int64_t x1, int64_t y1, int64_t x2, int64_t y2,
+			       int64_t * dsize, void **records)
 {
 	int error = 0;
-	int iter = 0;
+	int64_t lon1 = 0;
+	int64_t lat1 = 0;
+	int64_t lon2 = 0;
+	int64_t lat2 = 0;
+	int64_t iter = 0;
+	int64_t xiter = 0;
+	int64_t yiter = 0;
 	int64_t *ge = NULL;
-	char d[] = "0123456789";
+	int64_t *gb = NULL;
+	int64_t *be = NULL;
+	int64_t nrecords = 0;
+	int64_t nr = 0;
+	int64_t bx = 0;
+	int64_t by = 0;
+	int64_t bs = 0;
+	int64_t rsize = 0;
+	char *rrecords = NULL;
 	int isPaired = 0;
 	int vertical = -1;
 	int forward = -1;
 
-	error = getGridEntry(0, 0, &ge);
-	if (error < 0) {
+	getGridLocation(&lon1, &lat1, x1, y1);
+	getGridLocation(&lon2, &lat2, x2, y2);
+
+	rsize = (lon2 - lon1 + 1) * (lat2 - lat1 + 1) * pageSize;
+	*records = (void *)malloc(rsize);
+	if (*records == NULL) {
+		error = -ENOMEM;
 		goto clean;
 	}
 
-	error = insertGridRecord(ge, 0, 1, d, sizeof(d));
-	if (error < 0) {
-		goto clean;
+	rrecords = (char *)(*records) + 8;
+
+	for (xiter = lon1; xiter <= lon2; xiter++) {
+		for (yiter = lat1; yiter <= lat2; yiter++) {
+			error = getGridEntry(xiter, yiter, &ge);
+			if (error < 0) {
+				goto clean;
+			}
+
+			error =
+			    hasPairedBucket(-1, &isPaired, &vertical, &forward,
+					    xiter, yiter);
+			if (error < 0) {
+				goto clean;
+			}
+
+			if (isPaired
+			    && !((xiter == lon1 && vertical)
+				 || (yiter == lat1 && !vertical))) {
+				continue;
+			}
+
+			error = mapGridBucket(ge, &gb);
+			if (error < 0) {
+				goto clean;
+			}
+
+			nrecords = gb[1];
+
+			for (iter = 0; iter < nrecords; iter++) {
+				error = getBucketEntry(&be, gb, iter);
+				if (error < 0) {
+					unmapGridBucket(gb);
+					goto clean;
+				}
+
+				bx = be[0];
+				by = be[1];
+				bs = be[2];
+
+				if (bx >= x1 && bx <= x2 && by >= y1
+				    && by <= y2) {
+					nr += 1;
+					memcpy(rrecords, be, 24 + bs);
+					rrecords += (24 + bs);
+					*dsize += (24 + bs);
+				}
+			}
+
+			unmapGridBucket(gb);
+		}
 	}
 
-	error = splitGrid(1, 0, 0, 2, 3);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = getGridEntry(1, 0, &ge);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = splitBucket(1, 0, 0, 1, 0);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridRecord(ge, 2, 3, d, sizeof(d));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = updatePairedBuckets(0, 1, 0, ge[4]);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = splitGrid(0, 1, 0, 4, 5);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = splitBucket(0, 1, 0, 1, 1);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = getGridEntry(1, 1, &ge);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridRecord(ge, 4, 5, d, sizeof(d));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = updatePairedBuckets(0, 1, 1, ge[4]);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = splitGrid(1, 0, 0, 10, 11);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = getGridEntry(1, 1, &ge);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = insertGridRecord(ge, 10, 11, d, sizeof(d));
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = updatePairedBuckets(0, 1, 1, ge[4]);
-	if (error < 0) {
-		goto clean;
-	}
-
-	error = hasPairedBucket(0, &isPaired, &vertical, &forward, 1, 1);
-	if (error < 0) {
-		goto clean;
-	}
+	((int64_t *) * records)[0] = nr;
 
  clean:
 	return error;

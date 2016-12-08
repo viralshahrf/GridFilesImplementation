@@ -70,7 +70,8 @@ struct gridfile {
 	int insertRecord(int64_t x, int64_t y, void *record, int64_t rsize);
 	int findRecord(int64_t x, int64_t y, void **record);
 	int deleteRecord(int64_t x, int64_t y);
-	int testFunctionality();
+	int findRangeRecords(int64_t x1, int64_t y1, int64_t x2, int64_t y2,
+			     int64_t * dsize, void **records);
 };
 
 #endif
