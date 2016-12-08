@@ -6,11 +6,12 @@
 
 using namespace std;
 
-static const char rstring[] = "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
+static const char rstring[] =
+    "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
 
-static int rslength = sizeof(rstring) -1;
+static int64_t rslength = sizeof(rstring) - 1;
 
-void getRandomString(int *length, char **rands);
-void getRandomRecord(int *x, int *y, int *rsize, void **record);
+void getRandomString(int64_t * length, void **rands);
+void getRandomRecord(int64_t * x, int64_t * y, int64_t * rsize, void **record);
 
 #endif

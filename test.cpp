@@ -1,21 +1,26 @@
+#include <stdio.h>
 #include "gridfile.h"
 #include "datagenerator.h"
 
-#define NRECORDS 300
+#define SIZE 1000
+#define PSIZE 4096
+#define NAME "db"
+#define NRECORDS 8000000
 
-int main() {
+int main()
+{
 	int error = 0;
-	int x = 0;
-	int y = 0;
-	int rsize = 0;
 	int iter = 0;
+	int64_t x = 0;
+	int64_t y = 0;
+	int64_t rsize = 0;
 	void *record = NULL;
-
-	struct gridfile vgrid;
 	struct gridconfig vconfig;
-	vconfig.size = 10;
-	vconfig.psize = 4096;
-	vconfig.name = "test";
+	struct gridfile vgrid;
+
+	vconfig.size = SIZE;
+	vconfig.psize = PSIZE;
+	vconfig.name = NAME;
 
 	error = vgrid.createGrid(&vconfig);
 	if (error < 0) {
@@ -32,26 +37,16 @@ int main() {
 
 		error = vgrid.insertRecord(x, y, record, rsize);
 		if (error < 0) {
-			cout<<"l1\n";
-			free(record);
 			goto pclean;
 		}
 
 		free(record);
 	}
 
-	error = vgrid.findRecord(x, y, &record);
-	if (error < 0) {
-		cout<<"l2\n";
-		goto clean;
-	}
-
-	printf("Record: %s\n", (char *)record);
-
-pclean:
+ pclean:
 	vgrid.unloadGrid();
 
-clean:
-	cout<<error<<"\n";
+ clean:
+	printf("Error: %d\n", error);
 	return error;
 }
