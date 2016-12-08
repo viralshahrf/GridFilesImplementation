@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <errno.h>
 #include "gridfile.h"
 #include "datagenerator.h"
 
@@ -54,6 +55,18 @@ int main()
 	error = vgrid.findRecord(fx, fy, &record);
 	if (error < 0) {
 		goto clean;
+	}
+
+	error = vgrid.deleteRecord(fx, fy);
+	if (error < 0) {
+		goto clean;
+	}
+
+	error = vgrid.findRecord(fx, fy, &record);
+	if (error == -EINVAL) {
+		error = 0;
+	} else if (error == 0) {
+		error = -EINVAL;
 	}
 
  pclean:

@@ -1250,6 +1250,85 @@ int gridfile::findRecord(int64_t x, int64_t y, void **record)
 	return error;
 }
 
+/* Deletes record for given coordinates
+
+   Parameters:
+   x: Coordinate (x) pf record to be deleted
+   y: Coordinate (y) of record to be deleted
+
+   Return:
+   Zero on success, error on failure
+*/
+int gridfile::deleteRecord(int64_t x, int64_t y)
+{
+	int error = 0;
+	int found = 0;
+	int64_t lon = 0;
+	int64_t lat = 0;
+	int64_t *ge = NULL;
+	int64_t sx = 0;
+	int64_t sy = 0;
+	int64_t *gb = NULL;
+	int64_t nrecords = 0;
+	int64_t iter = 0;
+	int64_t *be = NULL;
+	int64_t bex = 0;
+	int64_t bey = 0;
+	int64_t rsize = 0;
+
+	getGridLocation(&lon, &lat, x, y);
+
+	error = getGridEntry(lon, lat, &ge);
+	if (error < 0) {
+		goto clean;
+	}
+
+	sx = ge[2];
+	sy = ge[3];
+
+	error = mapGridBucket(ge, &gb);
+	if (error < 0) {
+		goto clean;
+	}
+
+	nrecords = gb[1];
+
+	for (iter = 0; iter < nrecords; iter++) {
+		error = getBucketEntry(&be, gb, iter);
+		if (error < 0) {
+			goto pclean;
+		}
+
+		bex = be[0];
+		bey = be[1];
+		rsize = be[2];
+
+		if (bex == x && bey == y) {
+			found = 1;
+			error = deleteBucketEntry(gb, iter);
+			ge[0] -= (24 + rsize);
+			ge[1] -= 1;
+			ge[2] = sx - bex;
+			ge[3] = sy - bey;
+			break;
+		}
+	}
+
+	if (found) {
+		error = updatePairedBuckets(0, lon, lat, ge[4]);
+	}
+
+ pclean:
+	unmapGridBucket(gb);
+
+ clean:
+	if (!found) {
+		error = -EINVAL;
+	}
+
+	return error;
+}
+
 int gridfile::testFunctionality()
 {
 	int error = 0;
