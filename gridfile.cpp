@@ -303,6 +303,11 @@ int gridfile::insertGridPartition(int lon, int64_t partition)
 		iter++;
 	}
 
+	if (iter < ints && part[iter] == partition) {
+		error = -ENOMEM;
+		goto clean;
+	}
+
 	ipart = iter;
 
 	for (iter = ints; iter > ipart; iter--) {
